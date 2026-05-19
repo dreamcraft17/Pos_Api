@@ -12,13 +12,13 @@ return new class extends Migration
             $table->id();
             $table->timestamp('start_at');
             $table->timestamp('end_at');
-            $table->integer('opening_cash_cents')->default(0);
+            $table->integer('opening_cash_rupiah')->default(0);
             $table->integer('orders_count')->default(0);
             $table->integer('sold_items')->default(0);
-            $table->bigInteger('gross_cents')->default(0);
-            $table->bigInteger('discount_cents')->default(0);
-            $table->bigInteger('tax_cents')->default(0);
-            $table->bigInteger('net_cents')->default(0);
+            $table->bigInteger('gross_rupiah')->default(0);
+            $table->bigInteger('discount_rupiah')->default(0);
+            $table->bigInteger('tax_rupiah')->default(0);
+            $table->bigInteger('net_rupiah')->default(0);
             $table->json('by_payment')->nullable(); // {"cash": 100000, "qris": 50000}
             $table->json('items')->nullable(); // [{"name": "Espresso", "qty": 5, "totalCents": 50000}]
             $table->unsignedBigInteger('created_by')->nullable();

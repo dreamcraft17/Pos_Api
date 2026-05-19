@@ -26,7 +26,7 @@
 // //         // }
 
 // //         return $q->orderBy('id')->get([
-// //             'id', 'sku', 'name', 'price_cents', 'stock','category', 'updated_at'
+// //             'id', 'sku', 'name', 'price_rupiah', 'stock','category', 'updated_at'
 // //         ]);
 // //     }
 
@@ -35,7 +35,7 @@
 // //         $data = $r->validate([
 // //             'sku'         => 'required',
 // //             'name'        => 'required',
-// //             'price_cents' => 'required|integer|min:0',
+// //             'price_rupiah' => 'required|integer|min:0',
 // //             'stock'       => 'nullable|integer|min:0',
 // //             'category'    => 'nullable|string|max:100',
 // //         ]);
@@ -49,7 +49,7 @@
 
 // //         $prod->fill([
 // //             'name'        => $data['name'],
-// //             'price_cents' => $data['price_cents'],
+// //             'price_rupiah' => $data['price_rupiah'],
 // //             'stock'       => $data['stock'] ?? 0,
 // //             'category'    => $data['category'] ?? null,
 // //             'is_deleted'  => false,
@@ -69,7 +69,7 @@
 // //     {
 // //         $data = $r->validate([
 // //             'name'        => 'sometimes',
-// //             'price_cents' => 'sometimes|integer|min:0',
+// //             'price_rupiah' => 'sometimes|integer|min:0',
 // //             'stock'       => 'sometimes|integer|min:0',
 // //             'category'    => 'sometimes|string|max:100',
 // //         ]);
@@ -163,7 +163,7 @@
 //             'id',
 //             'sku',
 //             'name',
-//             'price_cents',
+//             'price_rupiah',
 //             'stock',
 //             'category',
 //             'unit',       // << baru
@@ -180,7 +180,7 @@
 //         $data = $r->validate([
 //             'sku'         => 'required',
 //             'name'        => 'required',
-//             'price_cents' => 'required|integer|min:0',
+//             'price_rupiah' => 'required|integer|min:0',
 //             'stock'       => 'nullable|integer|min:0',
 //             'category'    => 'nullable|string|max:100',
 //             'unit'        => 'nullable|string|max:50',   // << baru
@@ -199,7 +199,7 @@
 
 //         $prod->fill([
 //             'name'        => $data['name'],
-//             'price_cents' => $data['price_cents'],
+//             'price_rupiah' => $data['price_rupiah'],
 //             'stock'       => $data['stock'] ?? 0,
 //             'category'    => $data['category'] ?? null,
 //             'unit'        => $data['unit'] ?? null,      // << baru
@@ -224,7 +224,7 @@
 //     {
 //         $data = $r->validate([
 //             'name'        => 'sometimes',
-//             'price_cents' => 'sometimes|integer|min:0',
+//             'price_rupiah' => 'sometimes|integer|min:0',
 //             'stock'       => 'sometimes|integer|min:0',
 //             'category'    => 'sometimes|string|max:100',
 //             'unit'        => 'sometimes|string|max:50',   // << baru
@@ -319,7 +319,7 @@ class ProductController extends BaseApiController
             $q->where('updated_at', '>=', $updatedSince);
 
             return $q->orderBy('id')->get([
-                'id', 'sku', 'name', 'price_cents', 'stock', 'category',
+                'id', 'sku', 'name', 'price_rupiah', 'stock', 'category',
                 'unit', 'min_qty', 'mandarin', 'brand', 'station', 'updated_at',
             ]);
         }
@@ -328,7 +328,7 @@ class ProductController extends BaseApiController
             MasterDataCache::productsKey(null),
             MasterDataCache::ttl(),
             fn () => $q->orderBy('id')->get([
-                'id', 'sku', 'name', 'price_cents', 'stock', 'category',
+                'id', 'sku', 'name', 'price_rupiah', 'stock', 'category',
                 'unit', 'min_qty', 'mandarin', 'brand', 'station', 'updated_at',
             ])
         );
@@ -336,10 +336,12 @@ class ProductController extends BaseApiController
 
     public function store(Request $r)
     {
+        $this->mergeNormalizedInput($r);
+
         $data = $r->validate([
             'sku'         => 'required',
             'name'        => 'required',
-            'price_cents' => 'required|integer|min:0',
+            'price_rupiah' => 'required|integer|min:0',
             'stock'       => 'nullable|integer|min:0',
             'category'    => 'nullable|string|max:100',
             'unit'        => 'nullable|string|max:50',
@@ -357,7 +359,7 @@ class ProductController extends BaseApiController
 
         $prod->fill([
             'name'        => $data['name'],
-            'price_cents' => $data['price_cents'],
+            'price_rupiah' => $data['price_rupiah'],
             'stock'       => $data['stock'] ?? 0,
             'category'    => $data['category'] ?? null,
             'unit'        => $data['unit'] ?? null,
@@ -383,7 +385,7 @@ class ProductController extends BaseApiController
     {
         $data = $r->validate([
             'name'        => 'sometimes',
-            'price_cents' => 'sometimes|integer|min:0',
+            'price_rupiah' => 'sometimes|integer|min:0',
             'stock'       => 'sometimes|integer|min:0',
             'category'    => 'sometimes|string|max:100',
             'unit'        => 'sometimes|string|max:50',

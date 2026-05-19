@@ -12,10 +12,10 @@ return new class extends Migration
             $t->id();
             $t->timestamp('created_at')->useCurrent();
             $t->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-            $t->integer('subtotal_cents');
-            $t->integer('discount_cents')->default(0);
-            $t->integer('tax_cents');
-            $t->integer('total_cents');
+            $t->integer('subtotal_rupiah');
+            $t->integer('discount_rupiah')->default(0);
+            $t->integer('tax_rupiah');
+            $t->integer('total_rupiah');
             $t->json('payload');
         });
 
@@ -25,7 +25,7 @@ return new class extends Migration
             $t->string('sku',64)->nullable();
             $t->string('menu_code',64)->nullable();
             $t->integer('qty');
-            $t->integer('price_cents');
+            $t->integer('price_rupiah');
             $t->string('name')->nullable();
             $t->enum('temp',['ice','hot'])->nullable();
             $t->enum('size',['S','M','L'])->nullable();
@@ -36,7 +36,7 @@ return new class extends Migration
             $t->id();
             $t->foreignId('order_id')->constrained('orders')->cascadeOnDelete();
             $t->string('method',64);
-            $t->integer('amount_cents');
+            $t->integer('amount_rupiah');
             $t->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $t->timestamp('created_at')->useCurrent();
         });

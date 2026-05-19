@@ -9,13 +9,13 @@ class Shift extends Model
     protected $fillable = [
         'start_at',
         'end_at',
-        'opening_cash_cents',
+        'opening_cash_rupiah',
         'orders_count',
         'sold_items',
-        'gross_cents',
-        'discount_cents',
-        'tax_cents',
-        'net_cents',
+        'gross_rupiah',
+        'discount_rupiah',
+        'tax_rupiah',
+        'net_rupiah',
         'by_payment', // JSON
         'items',      // JSON
         'created_by',

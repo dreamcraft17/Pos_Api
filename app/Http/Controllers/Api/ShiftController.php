@@ -60,7 +60,7 @@ class ShiftController extends BaseApiController
             $rows = $q->orderByDesc('end_at')
                 ->limit($limit)
                 ->get([
-                    'id', 'start_at', 'end_at', 'opening_cash_cents',
+                    'id', 'start_at', 'end_at', 'opening_cash_rupiah',
                     'outlet_name', 'cashier_name', 'created_by',
                 ]);
 
@@ -93,7 +93,7 @@ class ShiftController extends BaseApiController
                 'active' => [
                     'id' => $shift->id,
                     'start_at' => $shift->start_at,
-                    'opening_cash_cents' => $shift->opening_cash_cents,
+                    'opening_cash_rupiah' => $shift->opening_cash_rupiah,
                     'outlet_name' => $shift->outlet_name,
                     'cashier_name' => $shift->cashier_name,
                 ],
@@ -174,10 +174,10 @@ class ShiftController extends BaseApiController
                 COUNT(DISTINCT o.id) as orders_count,
                 
                 -- Financial aggregates (shift period)
-                COALESCE(SUM(o.subtotal_cents), 0) as gross_cents,
-                COALESCE(SUM(o.discount_cents), 0) as discount_cents,
-                COALESCE(SUM(o.tax_cents), 0) as tax_cents,
-                COALESCE(SUM(o.total_cents), 0) as net_cents,
+                COALESCE(SUM(o.subtotal_rupiah), 0) as gross_rupiah,
+                COALESCE(SUM(o.discount_rupiah), 0) as discount_rupiah,
+                COALESCE(SUM(o.tax_rupiah), 0) as tax_rupiah,
+                COALESCE(SUM(o.total_rupiah), 0) as net_rupiah,
                 
                 -- Sold items today
                 (
@@ -189,14 +189,14 @@ class ShiftController extends BaseApiController
                 
                 -- Refund total (shift period)
                 (
-                    SELECT COALESCE(SUM(r.total_cents), 0)
+                    SELECT COALESCE(SUM(r.total_rupiah), 0)
                     FROM refunds r
                     WHERE r.order_id IN (
                         SELECT id FROM orders 
                         WHERE created_at BETWEEN ? AND ?
                         " . ($userId ? "AND created_by = ?" : "") . "
                     )
-                ) as refund_cents
+                ) as refund_rupiah
                 
             FROM orders o
             WHERE o.created_at BETWEEN ? AND ?
@@ -212,7 +212,7 @@ class ShiftController extends BaseApiController
                 'active' => [
                     'id' => $shift->id,
                     'start_at' => $startAt,
-                    'opening_cash_cents' => $shift->opening_cash_cents,
+                    'opening_cash_rupiah' => $shift->opening_cash_rupiah,
                     'outlet_name' => $shift->outlet_name,
                     'cashier_name' => $shift->cashier_name,
                 ],
@@ -221,11 +221,11 @@ class ShiftController extends BaseApiController
                     'end_at' => $endAt,
                     'orders_count' => 0,
                     'sold_items' => 0,
-                    'gross_cents' => 0,
-                    'discount_cents' => 0,
-                    'tax_cents' => 0,
-                    'net_cents' => 0,
-                    'refund_cents' => 0,
+                    'gross_rupiah' => 0,
+                    'discount_rupiah' => 0,
+                    'tax_rupiah' => 0,
+                    'net_rupiah' => 0,
+                    'refund_rupiah' => 0,
                     'refunded_items' => 0,
                     'by_payment' => [],
                     'items' => [],
@@ -243,13 +243,13 @@ class ShiftController extends BaseApiController
         $paymentsAgg = DB::table('payments')
             ->whereIn('order_id', $orderIdsSub)
             ->select('method')
-            ->selectRaw('SUM(amount_cents) as total_cents')
+            ->selectRaw('SUM(amount_rupiah) as total_rupiah')
             ->groupBy('method')
             ->get();
 
         $byPayment = [];
         foreach ($paymentsAgg as $row) {
-            $byPayment[$row->method] = (int) $row->total_cents;
+            $byPayment[$row->method] = (int) $row->total_rupiah;
         }
 
         // 5) ✅ Get items (optional - could be cached separately)
@@ -257,7 +257,7 @@ class ShiftController extends BaseApiController
             ->whereIn('order_id', $orderIdsSub)
             ->select('name')
             ->selectRaw('SUM(qty) as qty')
-            ->selectRaw('SUM(price_cents * qty) as total_cents')
+            ->selectRaw('SUM(price_rupiah * qty) as total_rupiah')
             ->groupBy('name')
             ->orderBy('name')
             ->limit(100) // ✅ Limit untuk performa
@@ -266,7 +266,7 @@ class ShiftController extends BaseApiController
         $items = $itemsAgg->map(fn($it) => [
             'name' => $it->name,
             'qty' => (int) $it->qty,
-            'total_cents' => (int) $it->total_cents,
+            'total_rupiah' => (int) $it->total_rupiah,
         ])->values()->all();
 
         return response()->json([
@@ -274,7 +274,7 @@ class ShiftController extends BaseApiController
             'active' => [
                 'id' => $shift->id,
                 'start_at' => $startAt,
-                'opening_cash_cents' => $shift->opening_cash_cents,
+                'opening_cash_rupiah' => $shift->opening_cash_rupiah,
                 'outlet_name' => $shift->outlet_name,
                 'cashier_name' => $shift->cashier_name,
             ],
@@ -283,11 +283,11 @@ class ShiftController extends BaseApiController
                 'end_at' => $endAt,
                 'orders_count' => (int) $data->orders_count,
                 'sold_items' => (int) $data->sold_items_today,
-                'gross_cents' => (int) $data->gross_cents,
-                'discount_cents' => (int) $data->discount_cents,
-                'tax_cents' => (int) $data->tax_cents,
-                'net_cents' => (int) $data->net_cents,
-                'refund_cents' => (int) $data->refund_cents,
+                'gross_rupiah' => (int) $data->gross_rupiah,
+                'discount_rupiah' => (int) $data->discount_rupiah,
+                'tax_rupiah' => (int) $data->tax_rupiah,
+                'net_rupiah' => (int) $data->net_rupiah,
+                'refund_rupiah' => (int) $data->refund_rupiah,
                 'refunded_items' => 0,
                 'by_payment' => $byPayment,
                 'items' => $items,
@@ -339,17 +339,19 @@ class ShiftController extends BaseApiController
 
     public function store(Request $r)
     {
+        $this->mergeNormalizedInput($r);
+
         try {
             $data = $r->validate([
                 'start_at' => 'required|date',
                 'end_at' => 'required|date',
-                'opening_cash_cents' => 'required|integer|min:0',
+                'opening_cash_rupiah' => 'required|integer|min:0',
                 'orders_count' => 'required|integer|min:0',
                 'sold_items' => 'required|integer|min:0',
-                'gross_cents' => 'required|integer|min:0',
-                'discount_cents' => 'required|integer|min:0',
-                'tax_cents' => 'required|integer|min:0',
-                'net_cents' => 'required|integer|min:0',
+                'gross_rupiah' => 'required|integer|min:0',
+                'discount_rupiah' => 'required|integer|min:0',
+                'tax_rupiah' => 'required|integer|min:0',
+                'net_rupiah' => 'required|integer|min:0',
                 'by_payment' => 'nullable|array',
                 'items' => 'nullable|array',
                 'outlet_name' => 'nullable|string|max:255',
@@ -361,13 +363,13 @@ class ShiftController extends BaseApiController
             $shift = Shift::create([
                 'start_at' => $data['start_at'],
                 'end_at' => $data['end_at'],
-                'opening_cash_cents' => $data['opening_cash_cents'],
+                'opening_cash_rupiah' => $data['opening_cash_rupiah'],
                 'orders_count' => $data['orders_count'],
                 'sold_items' => $data['sold_items'],
-                'gross_cents' => $data['gross_cents'],
-                'discount_cents' => $data['discount_cents'],
-                'tax_cents' => $data['tax_cents'],
-                'net_cents' => $data['net_cents'],
+                'gross_rupiah' => $data['gross_rupiah'],
+                'discount_rupiah' => $data['discount_rupiah'],
+                'tax_rupiah' => $data['tax_rupiah'],
+                'net_rupiah' => $data['net_rupiah'],
                 'by_payment' => $data['by_payment'] ?? null,
                 'items' => $data['items'] ?? null,
                 'outlet_name' => $data['outlet_name'] ?? null,
@@ -394,6 +396,8 @@ class ShiftController extends BaseApiController
 
     public function start(Request $r)
     {
+        $this->mergeNormalizedInput($r);
+
         try {
             // ✅ Check existing active shift first
             $existingShift = Shift::query()
@@ -411,14 +415,14 @@ class ShiftController extends BaseApiController
 
             $data = $r->validate([
                 'start_at' => 'nullable|date',
-                'opening_cash_cents' => 'required|integer|min:0',
+                'opening_cash_rupiah' => 'required|integer|min:0',
                 'outlet_name' => 'nullable|string|max:255',
                 'cashier_name' => 'nullable|string|max:255',
             ]);
 
             $shift = Shift::create([
                 'start_at' => $data['start_at'] ?? now(),
-                'opening_cash_cents' => $data['opening_cash_cents'],
+                'opening_cash_rupiah' => $data['opening_cash_rupiah'],
                 'outlet_name' => $data['outlet_name'] ?? null,
                 'cashier_name' => $data['cashier_name'] ?? null,
                 'created_by' => null,
@@ -453,10 +457,10 @@ class ShiftController extends BaseApiController
                 'end_at' => 'nullable|date',
                 'orders_count' => 'required|integer|min:0',
                 'sold_items' => 'required|integer|min:0',
-                'gross_cents' => 'required|integer|min:0',
-                'discount_cents' => 'required|integer|min:0',
-                'tax_cents' => 'required|integer|min:0',
-                'net_cents' => 'required|integer|min:0',
+                'gross_rupiah' => 'required|integer|min:0',
+                'discount_rupiah' => 'required|integer|min:0',
+                'tax_rupiah' => 'required|integer|min:0',
+                'net_rupiah' => 'required|integer|min:0',
                 'by_payment' => 'nullable|array',
                 'items' => 'nullable|array',
                 'outlet_name' => 'nullable|string|max:255',
@@ -476,10 +480,10 @@ class ShiftController extends BaseApiController
                 'end_at' => $data['end_at'] ?? now(),
                 'orders_count' => $data['orders_count'],
                 'sold_items' => $data['sold_items'],
-                'gross_cents' => $data['gross_cents'],
-                'discount_cents' => $data['discount_cents'],
-                'tax_cents' => $data['tax_cents'],
-                'net_cents' => $data['net_cents'],
+                'gross_rupiah' => $data['gross_rupiah'],
+                'discount_rupiah' => $data['discount_rupiah'],
+                'tax_rupiah' => $data['tax_rupiah'],
+                'net_rupiah' => $data['net_rupiah'],
                 'by_payment' => $data['by_payment'] ?? null,
                 'items' => $data['items'] ?? null,
                 'outlet_name' => $data['outlet_name'] ?? $shift->outlet_name,

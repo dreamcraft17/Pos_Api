@@ -12,7 +12,7 @@ return new class extends Migration
             $t->id();
             $t->string('sku', 64)->unique();
             $t->string('name');
-            $t->integer('price_cents');
+            $t->integer('price_rupiah');
             $t->integer('stock')->default(0);
             $t->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $t->boolean('is_deleted')->default(false);

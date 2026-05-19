@@ -22,10 +22,12 @@ class OrderController extends BaseApiController
 
     public function store(Request $r)
     {
+        $this->mergeNormalizedInput($r);
+
         $data = $r->validate([
             'items' => 'required|array|min:1',
             'items.*.qty' => 'required|integer|min:1',
-            'items.*.price_cents' => 'required|integer|min:0',
+            'items.*.price_rupiah' => 'required|integer|min:0',
             'items.*.sku' => 'nullable|string',
             'items.*.menu_code' => 'nullable|string',
             'items.*.bundle_code' => 'nullable|string',
@@ -36,27 +38,27 @@ class OrderController extends BaseApiController
             'service_rate'=> 'nullable|numeric',
             'payments' => 'array',
             'payments.*.method' => 'required|string|max:50',
-            'payments.*.amount_cents' => 'required|integer|min:0',
+            'payments.*.amount_rupiah' => 'required|integer|min:0',
             'discount' => 'nullable|array',
             'order_type' => 'nullable|string|max:50',
         ]);
 
         $uId = $this->currentUser($r)?->id;
 
-        $subtotal = collect($data['items'])->sum(fn($it) => $it['price_cents'] * $it['qty']);
-        [$discountCents, $discountMeta] = $this->discountResolver->resolve($data['discount'] ?? null, $subtotal);
+        $subtotal = collect($data['items'])->sum(fn($it) => $it['price_rupiah'] * $it['qty']);
+        [$discountRupiah, $discountMeta] = $this->discountResolver->resolve($data['discount'] ?? null, $subtotal);
 
         // $taxRate = $data['tax_rate'] ?? 0;
-        // $tax = (int) round(($subtotal - $discountCents) * $taxRate);
-        // $total = ($subtotal - $discountCents) + $tax;
+        // $tax = (int) round(($subtotal - $discountRupiah) * $taxRate);
+        // $total = ($subtotal - $discountRupiah) + $tax;
 
 
-        $netSubtotal = $subtotal - $discountCents;
+        $netSubtotal = $subtotal - $discountRupiah;
 
         $taxRate = (float) ($data['tax_rate'] ?? 0);
         $serviceRate = (float) ($data['service_rate']?? 0);
-        $serviceCents = (int) round($netSubtotal * $serviceRate);
-        $totalService = $netSubtotal + $serviceCents;
+        $serviceRupiah = (int) round($netSubtotal * $serviceRate);
+        $totalService = $netSubtotal + $serviceRupiah;
 
         $tax = (int) round($totalService * $taxRate);
 
@@ -65,15 +67,15 @@ class OrderController extends BaseApiController
 
         $orderType = $data['order_type'] ?? ($data['sales_type'] ?? null) ?? ($data['type'] ?? null);
 
-        $order = DB::transaction(function () use ($data, $uId, $subtotal, $discountCents, $serviceCents, $tax, $total, $orderType) {
+        $order = DB::transaction(function () use ($data, $uId, $subtotal, $discountRupiah, $serviceRupiah, $tax, $total, $orderType) {
             $stockCtx = $this->stock->preload($data['items']);
 
             $order = Order::create([
-                'subtotal_cents' => $subtotal,
-                'discount_cents' => $discountCents,
-                'service_cents'  => $serviceCents,
-                'tax_cents'      => $tax,
-                'total_cents'    => $total,
+                'subtotal_rupiah' => $subtotal,
+                'discount_rupiah' => $discountRupiah,
+                'service_rupiah'  => $serviceRupiah,
+                'tax_rupiah'      => $tax,
+                'total_rupiah'    => $total,
                 'payload'        => json_encode($data),
                 'created_by'     => $uId,
                 'order_type'     => $orderType,
@@ -89,7 +91,7 @@ class OrderController extends BaseApiController
                     'menu_code'   => $it['menu_code'] ?? null,
                     'bundle_code' => $it['bundle_code'] ?? null,
                     'qty'         => $it['qty'],
-                    'price_cents' => $it['price_cents'],
+                    'price_rupiah' => $it['price_rupiah'],
                     'name'        => $it['name'] ?? null,
                     'temp'        => $it['temp'] ?? null,
                     'size'        => $it['size'] ?? null,
@@ -113,7 +115,7 @@ class OrderController extends BaseApiController
                     $paymentRows[] = [
                         'order_id'     => $order->id,
                         'method'       => $p['method'],
-                        'amount_cents' => (int) $p['amount_cents'],
+                        'amount_rupiah' => (int) $p['amount_rupiah'],
                         'created_by'   => $uId,
                     ];
                 }
@@ -126,7 +128,7 @@ class OrderController extends BaseApiController
         return response()->json([
             'ok'          => true,
             'id'          => $order->id,
-            'total_cents' => $order->total_cents,
+            'total_rupiah' => $order->total_rupiah,
         ]);
     }
 
@@ -154,21 +156,21 @@ class OrderController extends BaseApiController
         $q->addSelect([
             'refunds_count' => Refund::selectRaw('COUNT(*)')
                 ->whereColumn('order_id', 'orders.id'),
-            'refund_total_cents' => Refund::selectRaw('COALESCE(SUM(total_cents),0)')
+            'refund_total_rupiah' => Refund::selectRaw('COALESCE(SUM(total_rupiah),0)')
                 ->whereColumn('order_id', 'orders.id'),
         ]);
 
         $columns = [
             'id',
-            'subtotal_cents',
-            'discount_cents',
-            'service_cents',
-            'tax_cents',
-            'total_cents',
+            'subtotal_rupiah',
+            'discount_rupiah',
+            'service_rupiah',
+            'tax_rupiah',
+            'total_rupiah',
             'order_type',
             'created_at',
             'refunds_count',
-            'refund_total_cents',
+            'refund_total_rupiah',
         ];
 
         if ($r->boolean('include_payload')) {
@@ -193,7 +195,7 @@ class OrderController extends BaseApiController
             ->pluck('refunded_qty', 'order_item_id');
 
         $refundStats = Refund::where('order_id', $o->id)
-            ->selectRaw('COUNT(*) as refunds_count, COALESCE(SUM(total_cents),0) as refund_total_cents')
+            ->selectRaw('COUNT(*) as refunds_count, COALESCE(SUM(total_rupiah),0) as refund_total_rupiah')
             ->first();
 
         $items = $o->items->map(function ($it) use ($refundedAgg) {
@@ -211,7 +213,7 @@ class OrderController extends BaseApiController
             'payments' => $o->payments,
             'has_refund' => (int) $refundStats->refunds_count > 0,
             'refunds_count' => (int) $refundStats->refunds_count,
-            'refund_total_cents' => (int) $refundStats->refund_total_cents,
+            'refund_total_rupiah' => (int) $refundStats->refund_total_rupiah,
         ];
     }
 
@@ -238,7 +240,7 @@ class OrderController extends BaseApiController
     //         'items.*.sku'              => 'nullable|string',
     //         'items.*.menu_code'        => 'nullable|string',
     //         'items.*.qty'              => 'required|integer|min:1',
-    //         'items.*.unit_price_cents' => 'nullable|integer|min:0',
+    //         'items.*.unit_price_rupiah' => 'nullable|integer|min:0',
     //         'reason' => 'nullable|string|max:200',
     //     ]);
 
@@ -267,11 +269,11 @@ class OrderController extends BaseApiController
     //     // // Hitung total refund (fallback ambil harga dari order_item)
     //     // $total = 0;
     //     // foreach ($data['items'] as &$it) {
-    //     //     $unit = (int)($it['unit_price_cents'] ?? 0);
+    //     //     $unit = (int)($it['unit_price_rupiah'] ?? 0);
     //     //     if (!$unit && !empty($it['order_item_id']) && isset($orderItems[$it['order_item_id']])){
-    //     //         $unit = (int)($orderItems[$it['order_item_id']]->price_cents ?? $orderItems[$it['order_item_id']]->price ?? 0);
+    //     //         $unit = (int)($orderItems[$it['order_item_id']]->price_rupiah ?? $orderItems[$it['order_item_id']]->price ?? 0);
     //     //     }
-    //     //     $it['unit_price_cents'] = $unit;
+    //     //     $it['unit_price_rupiah'] = $unit;
     //     //     $total += $unit * (int)$it['qty'];
     //     // }
     //     // unset($it);
@@ -280,7 +282,7 @@ class OrderController extends BaseApiController
 
     //     //     $refund = Refund::create([
     //     //         'order_id'    => $order->id,
-    //     //         'total_cents' => $total,
+    //     //         'total_rupiah' => $total,
     //     //         'reason'      => $data['reason'] ?? null,
     //     //         'payload'     => $data,
     //     //     ]);
@@ -288,7 +290,7 @@ class OrderController extends BaseApiController
     //             // Hitung subtotal refund (fallback ambil harga dari order_item)
     //     $subtotalRefund = 0;
     //     foreach ($data['items'] as &$it) {
-    //         $unit = (int)($it['unit_price_cents'] ?? 0);
+    //         $unit = (int)($it['unit_price_rupiah'] ?? 0);
 
     //         if (
     //             !$unit &&
@@ -296,18 +298,18 @@ class OrderController extends BaseApiController
     //             isset($orderItems[$it['order_item_id']])
     //         ) {
     //             $oi   = $orderItems[$it['order_item_id']];
-    //             $unit = (int)($oi->price_cents ?? $oi->price ?? 0);
+    //             $unit = (int)($oi->price_rupiah ?? $oi->price ?? 0);
     //         }
 
-    //         $it['unit_price_cents'] = $unit;
+    //         $it['unit_price_rupiah'] = $unit;
     //         $subtotalRefund += $unit * (int)$it['qty'];
     //     }
     //     unset($it);
 
     //     // ===== Distribusi diskon & pajak proporsional dari order asli =====
-    //     $orderSubtotal = (int)($order->subtotal_cents ?? 0);
-    //     $orderDiscount = (int)($order->discount_cents ?? 0);
-    //     $orderTax      = (int)($order->tax_cents ?? 0);
+    //     $orderSubtotal = (int)($order->subtotal_rupiah ?? 0);
+    //     $orderDiscount = (int)($order->discount_rupiah ?? 0);
+    //     $orderTax      = (int)($order->tax_rupiah ?? 0);
 
     //     $ratio = 0;
     //     if ($orderSubtotal > 0 && $subtotalRefund > 0) {
@@ -323,9 +325,9 @@ class OrderController extends BaseApiController
 
     //     // simpan perhitungan di payload buat debugging
     //     $calc = [
-    //         'subtotal_refund_cents' => $subtotalRefund,
-    //         'discount_refund_cents' => $discountRefund,
-    //         'tax_refund_cents'      => $taxRefund,
+    //         'subtotal_refund_rupiah' => $subtotalRefund,
+    //         'discount_refund_rupiah' => $discountRefund,
+    //         'tax_refund_rupiah'      => $taxRefund,
     //         'ratio'                 => $ratio,
     //     ];
 
@@ -336,7 +338,7 @@ class OrderController extends BaseApiController
 
     //         $refund = Refund::create([
     //             'order_id'    => $order->id,
-    //             'total_cents' => $totalRefund,
+    //             'total_rupiah' => $totalRefund,
     //             'reason'      => $data['reason'] ?? null,
     //             'payload'     => $payload,
     //         ]);
@@ -363,7 +365,7 @@ class OrderController extends BaseApiController
     //                 'sku'              => $it['sku'] ?? null,
     //                 'menu_code'        => $it['menu_code'] ?? null,
     //                 'qty'              => (int)$it['qty'],
-    //                 'unit_price_cents' => (int)$it['unit_price_cents'],
+    //                 'unit_price_rupiah' => (int)$it['unit_price_rupiah'],
     //             ]);
 
     //             // === RESTOCK ===
@@ -391,12 +393,14 @@ class OrderController extends BaseApiController
     //         return $refund;
     //     });
 
-    //     return ['ok'=>true, 'refund_id'=>$refund->id, 'total_cents'=>$refund->total_cents];
+    //     return ['ok'=>true, 'refund_id'=>$refund->id, 'total_rupiah'=>$refund->total_rupiah];
     // }
 
 
     public function refund(Request $r, $id)
 {
+    $this->mergeNormalizedInput($r);
+
     $data = $r->validate([
         'items' => 'required|array|min:1',
         'items.*.order_item_id'    => 'nullable|integer',
@@ -404,7 +408,7 @@ class OrderController extends BaseApiController
         'items.*.menu_code'        => 'nullable|string',
         'items.*.bundle_code'      => 'nullable|string',
         'items.*.qty'              => 'required|integer|min:1',
-        'items.*.unit_price_cents' => 'nullable|integer|min:0',
+        'items.*.unit_price_rupiah' => 'nullable|integer|min:0',
         'items.*.name'             => 'nullable|string', // TAMBAHAN: nama item
         'reason' => 'nullable|string|max:200',
         'adjust_payments' => 'nullable|boolean', // TAMBAHAN: flag untuk adjust payment
@@ -412,7 +416,7 @@ class OrderController extends BaseApiController
 
     $order = Order::with(['items', 'payments'])->findOrFail($id);
 
-    $isPaid = $order->payments->sum('amount_cents') >= $order->total_cents;
+    $isPaid = $order->payments->sum('amount_rupiah') >= $order->total_rupiah;
 
     $orderItems = $order->items->keyBy('id');
 
@@ -440,16 +444,16 @@ class OrderController extends BaseApiController
     $refundItemsDetails = []; // Untuk menyimpan detail item yang direfund
     
     foreach ($data['items'] as &$it) {
-        $unit = (int)($it['unit_price_cents'] ?? 0);
+        $unit = (int)($it['unit_price_rupiah'] ?? 0);
         $name = $it['name'] ?? '';
 
         if (!$unit && !empty($it['order_item_id']) && isset($orderItems[$it['order_item_id']])) {
             $oi = $orderItems[$it['order_item_id']];
-            $unit = (int)($oi->price_cents ?? $oi->price ?? 0);
+            $unit = (int)($oi->price_rupiah ?? $oi->price ?? 0);
             $name = $name ?: ($oi->name ?? '');
         }
 
-        $it['unit_price_cents'] = $unit;
+        $it['unit_price_rupiah'] = $unit;
         $it['name'] = $name;
         
         $itemTotal = $unit * (int)$it['qty'];
@@ -462,16 +466,16 @@ class OrderController extends BaseApiController
             'menu_code' => $it['menu_code'] ?? null,
             'name' => $name,
             'qty' => (int)$it['qty'],
-            'unit_price_cents' => $unit,
-            'item_total_cents' => $itemTotal,
+            'unit_price_rupiah' => $unit,
+            'item_total_rupiah' => $itemTotal,
         ];
     }
     unset($it);
 
     // ===== Distribusi diskon & pajak proporsional =====
-    $orderSubtotal = (int)($order->subtotal_cents ?? 0);
-    $orderDiscount = (int)($order->discount_cents ?? 0);
-    $orderTax      = (int)($order->tax_cents ?? 0);
+    $orderSubtotal = (int)($order->subtotal_rupiah ?? 0);
+    $orderDiscount = (int)($order->discount_rupiah ?? 0);
+    $orderTax      = (int)($order->tax_rupiah ?? 0);
 
     $ratio = 0;
     if ($orderSubtotal > 0 && $subtotalRefund > 0) {
@@ -485,11 +489,11 @@ class OrderController extends BaseApiController
     $totalRefund = $subtotalRefund - $discountRefund + $taxRefund;
 
     $calc = [
-        'subtotal_refund_cents' => $subtotalRefund,
-        'discount_refund_cents' => $discountRefund,
-        'tax_refund_cents'      => $taxRefund,
+        'subtotal_refund_rupiah' => $subtotalRefund,
+        'discount_refund_rupiah' => $discountRefund,
+        'tax_refund_rupiah'      => $taxRefund,
         'ratio'                 => $ratio,
-        'total_refund_cents'    => $totalRefund,
+        'total_refund_rupiah'    => $totalRefund,
     ];
 
     $stockCtx = $this->stock->preload($data['items'], $orderItems);
@@ -504,7 +508,7 @@ class OrderController extends BaseApiController
 
         $refund = Refund::create([
             'order_id'    => $order->id,
-            'total_cents' => $totalRefund,
+            'total_rupiah' => $totalRefund,
             'reason'      => $data['reason'] ?? null,
             'payload'     => $payload,
         ]);
@@ -522,7 +526,7 @@ class OrderController extends BaseApiController
                 'menu_code'        => $it['menu_code'] ?? null,
                 'name'             => $it['name'] ?? null,
                 'qty'              => (int) $it['qty'],
-                'unit_price_cents' => (int) $it['unit_price_cents'],
+                'unit_price_rupiah' => (int) $it['unit_price_rupiah'],
                 'created_at'       => $now,
                 'updated_at'       => $now,
             ];
@@ -539,7 +543,7 @@ class OrderController extends BaseApiController
         }
 
         // Update total refund di order
-        $order->increment('refund_total_cents', $totalRefund);
+        $order->increment('refund_total_rupiah', $totalRefund);
 
         // ===== Adjust Payments jika diminta dan order sudah dibayar =====
         if (($data['adjust_payments'] ?? false) && $isPaid) {
@@ -550,14 +554,14 @@ class OrderController extends BaseApiController
     });
 
     $order->refresh();
-    $paidCents = (int) Payment::where('order_id', $order->id)->sum('amount_cents');
+    $paidRupiah = (int) Payment::where('order_id', $order->id)->sum('amount_rupiah');
 
     return [
         'ok' => true,
         'refund_id' => $refund->id,
-        'total_cents' => $refund->total_cents,
-        'order_refund_total_cents' => (int) $order->refund_total_cents,
-        'remaining_balance_cents' => $paidCents - (int) $order->refund_total_cents,
+        'total_rupiah' => $refund->total_rupiah,
+        'order_refund_total_rupiah' => (int) $order->refund_total_rupiah,
+        'remaining_balance_rupiah' => $paidRupiah - (int) $order->refund_total_rupiah,
     ];
 }
 
@@ -574,16 +578,16 @@ class OrderController extends BaseApiController
                 break;
             }
 
-            $available = (int) $payment->amount_cents;
+            $available = (int) $payment->amount_rupiah;
             $toRefund = min($available, $remainingRefund);
 
             if ($toRefund <= 0) {
                 continue;
             }
 
-            $payment->decrement('amount_cents', $toRefund);
+            $payment->decrement('amount_rupiah', $toRefund);
 
-            if ($payment->amount_cents <= 0) {
+            if ($payment->amount_rupiah <= 0) {
                 $payment->delete();
             }
 
@@ -594,7 +598,7 @@ class OrderController extends BaseApiController
             Payment::create([
                 'order_id' => $order->id,
                 'method' => 'refund_adjustment',
-                'amount_cents' => -$remainingRefund,
+                'amount_rupiah' => -$remainingRefund,
                 'created_by' => auth()->id(),
                 'created_at' => now(),
             ]);

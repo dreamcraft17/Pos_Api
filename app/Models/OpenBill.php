@@ -12,10 +12,10 @@ class OpenBill extends Model
         'user_id',
         'client_id',
         'status',
-        'subtotal_cents',
-        'discount_cents',
-        'tax_cents',
-        'total_cents',
+        'subtotal_rupiah',
+        'discount_rupiah',
+        'tax_rupiah',
+        'total_rupiah',
         'payload',
     ];
 

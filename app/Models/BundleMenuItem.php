@@ -10,7 +10,7 @@ class BundleMenuItem extends Model
     
     protected $fillable = [
         'bundle_code', 'menu_code', 'menu_name', 'menu_type', 
-        'qty', 'price_cents', 'created_by'
+        'qty', 'price_rupiah', 'created_by'
     ];
 
     public function menu()

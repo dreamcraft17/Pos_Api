@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Models\OpenBill;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-class OpenBillController extends Controller
+class OpenBillController extends BaseApiController
 {
     // GET /api/open-bills
     public function index(Request $request)
@@ -40,11 +39,11 @@ class OpenBillController extends Controller
     //         'status'    => 'nullable|string|max:20',
     //         'items'     => 'required|array|min:1',
     //         'items.*.qty'         => 'required|integer|min:1',
-    //         'items.*.price_cents' => 'required|integer|min:0',
+    //         'items.*.price_rupiah' => 'required|integer|min:0',
     //         // kalau mau lebih strict, tambahin rule sku/name/etc di sini
-    //         'discount_cents' => 'nullable|integer',
-    //         'tax_cents'      => 'nullable|integer',
-    //         'total_cents'    => 'nullable|integer',
+    //         'discount_rupiah' => 'nullable|integer',
+    //         'tax_rupiah'      => 'nullable|integer',
+    //         'total_rupiah'    => 'nullable|integer',
     //     ]);
 
     //     $payload = $request->all();
@@ -52,14 +51,14 @@ class OpenBillController extends Controller
     //     // Hitung subtotal dari items
     //     $items = $payload['items'] ?? [];
     //     $subtotal = collect($items)->sum(function ($it) {
-    //         $price = (int)($it['price_cents'] ?? 0);
+    //         $price = (int)($it['price_rupiah'] ?? 0);
     //         $qty   = (int)($it['qty'] ?? 0);
     //         return $price * $qty;
     //     });
 
-    //     $discount = (int)($payload['discount_cents'] ?? 0);
-    //     $tax      = (int)($payload['tax_cents'] ?? 0);
-    //     $total    = (int)($payload['total_cents'] ?? ($subtotal - $discount + $tax));
+    //     $discount = (int)($payload['discount_rupiah'] ?? 0);
+    //     $tax      = (int)($payload['tax_rupiah'] ?? 0);
+    //     $total    = (int)($payload['total_rupiah'] ?? ($subtotal - $discount + $tax));
 
     //     $clientId = $payload['client_id'] ?? null;
     //     $status   = $payload['status'] ?? 'open';
@@ -74,10 +73,10 @@ class OpenBillController extends Controller
     //                 ],
     //                 [
     //                     'status'         => $status,
-    //                     'subtotal_cents' => $subtotal,
-    //                     'discount_cents' => $discount,
-    //                     'tax_cents'      => $tax,
-    //                     'total_cents'    => $total,
+    //                     'subtotal_rupiah' => $subtotal,
+    //                     'discount_rupiah' => $discount,
+    //                     'tax_rupiah'      => $tax,
+    //                     'total_rupiah'    => $total,
     //                     'payload'        => $payload,
     //                 ]
     //             );
@@ -86,10 +85,10 @@ class OpenBillController extends Controller
     //                 'user_id'        => $user?->id,
     //                 'client_id'      => null,
     //                 'status'         => $status,
-    //                 'subtotal_cents' => $subtotal,
-    //                 'discount_cents' => $discount,
-    //                 'tax_cents'      => $tax,
-    //                 'total_cents'    => $total,
+    //                 'subtotal_rupiah' => $subtotal,
+    //                 'discount_rupiah' => $discount,
+    //                 'tax_rupiah'      => $tax,
+    //                 'total_rupiah'    => $total,
     //                 'payload'        => $payload,
     //             ]);
     //         }
@@ -110,12 +109,12 @@ class OpenBillController extends Controller
 //         // items batch awal (wajib – sama seperti sekarang)
 //         'items'              => 'required|array|min:1',
 //         'items.*.qty'        => 'required|integer|min:1',
-//         'items.*.price_cents'=> 'required|integer|min:0',
+//         'items.*.price_rupiah'=> 'required|integer|min:0',
 
 //         // boleh dikirim dari client, tapi di-sanitize di server
-//         'discount_cents' => 'nullable|integer',
-//         'tax_cents'      => 'nullable|integer',
-//         'total_cents'    => 'nullable|integer',
+//         'discount_rupiah' => 'nullable|integer',
+//         'tax_rupiah'      => 'nullable|integer',
+//         'total_rupiah'    => 'nullable|integer',
 
 //         // edits tidak divalidasi terlalu ketat (optional)
 //         // 'edits' => 'array',
@@ -129,7 +128,7 @@ class OpenBillController extends Controller
 
 //     // ====== 1) Hitung subtotal dari ITEMS (batch awal) ======
 //     $rawSubtotal = collect($items)->sum(function ($it) {
-//         $price = (int)($it['price_cents'] ?? 0);
+//         $price = (int)($it['price_rupiah'] ?? 0);
 //         $qty   = (int)($it['qty'] ?? 0);
 //         return $price * $qty;
 //     });
@@ -151,14 +150,14 @@ class OpenBillController extends Controller
 //                 }
 
 //                 $qty   = (int)($eItem['qty'] ?? 0);
-//                 $price = (int)($eItem['price_cents'] ?? 0);
+//                 $price = (int)($eItem['price_rupiah'] ?? 0);
 
-//                 // kalau price_cents nggak dikirim di edits, fallback cari dari items utama pakai sku
+//                 // kalau price_rupiah nggak dikirim di edits, fallback cari dari items utama pakai sku
 //                 if ($price === 0 && !empty($eItem['sku'])) {
 //                     $sku = $eItem['sku'];
 //                     $found = collect($items)->firstWhere('sku', $sku);
 //                     if ($found) {
-//                         $price = (int)($found['price_cents'] ?? 0);
+//                         $price = (int)($found['price_rupiah'] ?? 0);
 //                     }
 //                 }
 
@@ -173,11 +172,11 @@ class OpenBillController extends Controller
 //     $subtotal = max(0, $rawSubtotal - $voidTotal);
 
 //     // ====== 3) Discount / tax / total final ======
-//     $discount = (int)($payload['discount_cents'] ?? 0);
-//     $tax      = (int)($payload['tax_cents'] ?? 0);
+//     $discount = (int)($payload['discount_rupiah'] ?? 0);
+//     $tax      = (int)($payload['tax_rupiah'] ?? 0);
 
-//     // Kalau client kirim total_cents, boleh dipakai, tapi kalau nggak ada pakai rumus standar
-//     $total    = (int)($payload['total_cents'] ?? ($subtotal - $discount + $tax));
+//     // Kalau client kirim total_rupiah, boleh dipakai, tapi kalau nggak ada pakai rumus standar
+//     $total    = (int)($payload['total_rupiah'] ?? ($subtotal - $discount + $tax));
 
 //     $clientId = $payload['client_id'] ?? null;
 //     $status   = $payload['status'] ?? 'open';
@@ -192,10 +191,10 @@ class OpenBillController extends Controller
 //                 ],
 //                 [
 //                     'status'         => $status,
-//                     'subtotal_cents' => $subtotal,
-//                     'discount_cents' => $discount,
-//                     'tax_cents'      => $tax,
-//                     'total_cents'    => $total,
+//                     'subtotal_rupiah' => $subtotal,
+//                     'discount_rupiah' => $discount,
+//                     'tax_rupiah'      => $tax,
+//                     'total_rupiah'    => $total,
 //                     'payload'        => $payload,
 //                 ]
 //             );
@@ -205,10 +204,10 @@ class OpenBillController extends Controller
 //                 'user_id'        => $user?->id,
 //                 'client_id'      => null,
 //                 'status'         => $status,
-//                 'subtotal_cents' => $subtotal,
-//                 'discount_cents' => $discount,
-//                 'tax_cents'      => $tax,
-//                 'total_cents'    => $total,
+//                 'subtotal_rupiah' => $subtotal,
+//                 'discount_rupiah' => $discount,
+//                 'tax_rupiah'      => $tax,
+//                 'total_rupiah'    => $total,
 //                 'payload'        => $payload,
 //             ]);
 //         }
@@ -220,6 +219,8 @@ class OpenBillController extends Controller
 
 public function store(Request $request)
 {
+    $this->mergeNormalizedInput($request);
+
     $user = null;
 
     $data = $request->validate([
@@ -229,11 +230,11 @@ public function store(Request $request)
         'items'               => 'required|array|min:1',
         'items.*.sku'         => 'required|string',
         'items.*.qty'         => 'required|integer|min:1',
-        'items.*.price_cents' => 'required|integer|min:0',
+        'items.*.price_rupiah' => 'required|integer|min:0',
 
-        'discount_cents' => 'nullable|integer',
-        'tax_cents'      => 'nullable|integer',
-        'total_cents'    => 'nullable|integer',
+        'discount_rupiah' => 'nullable|integer',
+        'tax_rupiah'      => 'nullable|integer',
+        'total_rupiah'    => 'nullable|integer',
     ]);
 
     // Payload full dari client (items + edits + dll)
@@ -256,8 +257,8 @@ public function store(Request $request)
             continue;
         }
 
-        $price = (int)($it['price_cents']
-            ?? $it['unit_price_cents']
+        $price = (int)($it['price_rupiah']
+            ?? $it['unit_price_rupiah']
             ?? 0);
         $qty = (int)($it['qty'] ?? 0);
 
@@ -271,7 +272,7 @@ public function store(Request $request)
             // simpan template awal (tanpa qty)
             $template       = $it;
             $template['qty'] = 0;
-            $template['price_cents'] = $price; // normalisasi
+            $template['price_rupiah'] = $price; // normalisasi
             $agg[$key] = [
                 'template' => $template,
                 'qty'      => 0,
@@ -319,7 +320,7 @@ public function store(Request $request)
                 }
 
                 // ambil price dari edits kalau ada, else fallback sku dari items awal
-                $price = (int)($eItem['price_cents'] ?? 0);
+                $price = (int)($eItem['price_rupiah'] ?? 0);
                 if ($price <= 0) {
                     $foundPrice = $lookupPriceBySku($sku);
                     if ($foundPrice === null) {
@@ -336,7 +337,7 @@ public function store(Request $request)
                     // tambahan yang benar-benar baru (belum ada di items awal)
                     $template = $eItem;
                     $template['qty'] = 0;
-                    $template['price_cents'] = $price;
+                    $template['price_rupiah'] = $price;
                     $agg[$key] = [
                         'template' => $template,
                         'qty'      => 0,
@@ -368,7 +369,7 @@ public function store(Request $request)
         $item = $row['template'];
         $item['qty'] = $qty;
 
-        $price = (int)$item['price_cents'];
+        $price = (int)$item['price_rupiah'];
         $subtotal += $price * $qty;
 
         $finalItems[] = $item;
@@ -380,12 +381,12 @@ public function store(Request $request)
 
 
     // ================= 4) HITUNG DISCOUNT / TAX / TOTAL =================
-    $discount = (int)($payload['discount_cents'] ?? 0);
-    $tax      = (int)($payload['tax_cents'] ?? 0);
+    $discount = (int)($payload['discount_rupiah'] ?? 0);
+    $tax      = (int)($payload['tax_rupiah'] ?? 0);
 
-    // kalau client kirim total_cents, boleh dipakai,
+    // kalau client kirim total_rupiah, boleh dipakai,
     // tapi kalau tidak, pakai rumus standar
-    $total    = (int)($payload['total_cents'] ?? ($subtotal - $discount + $tax));
+    $total    = (int)($payload['total_rupiah'] ?? ($subtotal - $discount + $tax));
 
     $clientId = $payload['client_id'] ?? null;
     $status   = $payload['status'] ?? 'open';
@@ -399,10 +400,10 @@ public function store(Request $request)
                 ],
                 [
                     'status'         => $status,
-                    'subtotal_cents' => $subtotal,
-                    'discount_cents' => $discount,
-                    'tax_cents'      => $tax,
-                    'total_cents'    => $total,
+                    'subtotal_rupiah' => $subtotal,
+                    'discount_rupiah' => $discount,
+                    'tax_rupiah'      => $tax,
+                    'total_rupiah'    => $total,
                     'payload'        => $payload,
                 ]
             );
@@ -411,10 +412,10 @@ public function store(Request $request)
                 'user_id'        => $user?->id,
                 'client_id'      => null,
                 'status'         => $status,
-                'subtotal_cents' => $subtotal,
-                'discount_cents' => $discount,
-                'tax_cents'      => $tax,
-                'total_cents'    => $total,
+                'subtotal_rupiah' => $subtotal,
+                'discount_rupiah' => $discount,
+                'tax_rupiah'      => $tax,
+                'total_rupiah'    => $total,
                 'payload'        => $payload,
             ]);
         }

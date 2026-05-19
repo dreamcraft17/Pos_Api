@@ -9,7 +9,7 @@ class MenuVariant extends Model
     public $timestamps = false;
 
     // Tambah 'menu_id' supaya anak nempel ke parent spesifik
-    protected $fillable = ['menu_id','menu_code','kind','category','size','price_cents','created_by'];
+    protected $fillable = ['menu_id','menu_code','kind','category','size','price_rupiah','created_by'];
 
     public function menu()
     {

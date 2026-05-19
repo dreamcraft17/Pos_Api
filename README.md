@@ -43,7 +43,7 @@ API ini menjadi **sumber data pusat** antara database dan aplikasi kasir. Client
         └── Middleware CookieAuth (session user opsional)
 ```
 
-- Harga disimpan dalam **sen** (`*_cents`) untuk menghindari floating point.
+- Harga disimpan dalam **Rupiah (IDR)** sebagai integer (`*_rupiah`), misalnya `15000` = Rp 15.000 (tanpa desimal/sen).
 - Order menyimpan snapshot payload JSON + baris `order_items` / `payments`.
 - Menu bisa punya **komponen** (`menu_items` → `product_sku` + qty): saat order, stok produk komponen dikurangi otomatis.
 - Multi-user: banyak entitas punya `created_by` agar data per kasir/outlet tidak bentrok.
@@ -226,7 +226,7 @@ Lihat `routes/api.php` untuk daftar lengkap.
 
 ## Catatan pengembangan
 
-- **Uang:** selalu gunakan field `*_cents` (integer).
+- **Uang:** selalu gunakan field `*_rupiah` (integer). Client lama yang masih kirim `*_cents` akan dinormalisasi otomatis ke `*_rupiah` (nilai sama, bukan dikonversi).
 - **Stok order:** `sku` → produk langsung; `menu_code` → komponen `menu_items`; `bundle_code` → komponen bundle (menu + produk).
 - **Order list:** tambahkan `?include_payload=1` hanya jika client butuh JSON penuh per order.
 - **Refund:** qty divalidasi agar tidak melebihi yang sudah dibeli minus yang sudah direfund.

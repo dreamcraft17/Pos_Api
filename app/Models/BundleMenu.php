@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class BundleMenu extends Model
 {
     protected $fillable = [
-        'bundle_code', 'name', 'price_cents', 'enabled', 'sort', 
+        'bundle_code', 'name', 'price_rupiah', 'enabled', 'sort', 
         'type', 'created_by', 'created_by_id'
     ];
 

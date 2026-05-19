@@ -12,7 +12,7 @@ return new class extends Migration
             $t->id();
             $t->string('code',64)->unique();
             $t->string('name');
-            $t->integer('price_cents');
+            $t->integer('price_rupiah');
             $t->text('image_url')->nullable();
             $t->boolean('enabled')->default(true);
             $t->integer('sort')->default(0);
@@ -35,7 +35,7 @@ return new class extends Migration
             $t->enum('kind', ['drink','food']);
             $t->enum('category', ['hot','ice'])->nullable();
             $t->enum('size', ['S','M','L'])->nullable();
-            $t->integer('price_cents');
+            $t->integer('price_rupiah');
             $t->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $t->unique(['menu_code','category','size']);
             $t->foreign('menu_code')->references('code')->on('menus')->cascadeOnDelete();

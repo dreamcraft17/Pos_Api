@@ -14,7 +14,7 @@ return new class extends Migration {
       $t->string('sku')->nullable();
       $t->string('menu_code')->nullable();
       $t->integer('qty')->default(0);
-      $t->integer('unit_price_cents')->default(0);
+      $t->integer('unit_price_rupiah')->default(0);
       $t->timestamps();
 
       $t->foreign('refund_id')->references('id')->on('refunds')->onDelete('cascade');

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Menu extends Model
 {
     protected $fillable = [
-        'code','name','price_cents','image_url','enabled','sort','created_by','type',
+        'code','name','price_rupiah','image_url','enabled','sort','created_by','type',
     ];
 
     // Relasi baru via menu_id (bukan menu_code)

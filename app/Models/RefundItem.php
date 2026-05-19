@@ -7,7 +7,7 @@
 // class RefundItem extends Model
 // {
 //   protected $fillable = [
-//     'refund_id','order_id','order_item_id','sku','menu_code','qty','unit_price_cents'
+//     'refund_id','order_id','order_item_id','sku','menu_code','qty','unit_price_rupiah'
 //   ];
 
 //   public function refund()    { return $this->belongsTo(Refund::class); }
@@ -31,7 +31,7 @@ class RefundItem extends Model
         'menu_code',
         'name', // TAMBAHAN: nama item
         'qty',
-        'unit_price_cents'
+        'unit_price_rupiah'
     ];
 
     public function refund()
@@ -45,8 +45,8 @@ class RefundItem extends Model
     }
 
     // Hitung total per item
-    public function getTotalCentsAttribute()
+    public function getTotalRupiahAttribute()
     {
-        return $this->qty * $this->unit_price_cents;
+        return $this->qty * $this->unit_price_rupiah;
     }
 }

@@ -13,10 +13,10 @@ return new class extends Migration
             $table->unsignedBigInteger('user_id')->nullable()->index();
             $table->string('client_id', 100)->nullable()->index(); // id lokal dari app
             $table->string('status', 20)->default('open');         // open/cancelled/done (optional)
-            $table->integer('subtotal_cents')->default(0);
-            $table->integer('discount_cents')->default(0);
-            $table->integer('tax_cents')->default(0);
-            $table->integer('total_cents')->default(0);
+            $table->integer('subtotal_rupiah')->default(0);
+            $table->integer('discount_rupiah')->default(0);
+            $table->integer('tax_rupiah')->default(0);
+            $table->integer('total_rupiah')->default(0);
             $table->json('payload'); // full JSON open bill dari app
             $table->timestamps();
         });

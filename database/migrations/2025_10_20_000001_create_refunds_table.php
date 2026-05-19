@@ -9,7 +9,7 @@ return new class extends Migration {
     Schema::create('refunds', function (Blueprint $t) {
       $t->id();
       $t->unsignedBigInteger('order_id');
-      $t->integer('total_cents')->default(0);
+      $t->integer('total_rupiah')->default(0);
       $t->string('reason', 200)->nullable();
       $t->json('payload')->nullable(); // simpan payload request utk audit
       $t->timestamps();

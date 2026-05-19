@@ -61,7 +61,7 @@ class BundleMenuController extends BaseApiController
                 'id' => $bundle->id,
                 'code' => $bundle->bundle_code,
                 'name' => $bundle->name,
-                'price_cents' => $bundle->price_cents,
+                'price_rupiah' => $bundle->price_rupiah,
                 'enabled' => $bundle->enabled,
                 'sort' => $bundle->sort,
                 'type' => $bundle->type ?? 'bundle',
@@ -71,7 +71,7 @@ class BundleMenuController extends BaseApiController
                         'menu_name' => $item->menu_name,
                         'menu_type' => $item->menu_type,
                         'qty' => $item->qty,
-                        'price_cents' => $item->price_cents,
+                        'price_rupiah' => $item->price_rupiah,
                     ];
                 })->values(),
                 'components' => ($components[$bundle->bundle_code] ?? collect())->map(function($comp) {
@@ -88,10 +88,12 @@ class BundleMenuController extends BaseApiController
 
     public function store(Request $r)
     {
+        $this->mergeNormalizedInput($r);
+
         $data = $r->validate([
             'code' => 'required|string|unique:bundle_menus,bundle_code',
             'name' => 'required|string',
-            'price_cents' => 'required|integer|min:0',
+            'price_rupiah' => 'required|integer|min:0',
             'enabled' => 'nullable|boolean',
             'sort' => 'nullable|integer',
             'type' => 'nullable|string|in:bundle,combo,set',
@@ -110,7 +112,7 @@ class BundleMenuController extends BaseApiController
             $bundle = BundleMenu::create([
                 'bundle_code' => $data['code'],
                 'name' => $data['name'],
-                'price_cents' => $data['price_cents'],
+                'price_rupiah' => $data['price_rupiah'],
                 'enabled' => $data['enabled'] ?? true,
                 'sort' => $data['sort'] ?? 0,
                 'type' => $data['type'] ?? 'bundle',
@@ -135,7 +137,7 @@ class BundleMenuController extends BaseApiController
     {
         $data = $r->validate([
             'name' => 'sometimes|string',
-            'price_cents' => 'sometimes|integer|min:0',
+            'price_rupiah' => 'sometimes|integer|min:0',
             'enabled' => 'sometimes|boolean',
             'sort' => 'sometimes|integer',
             'type' => 'sometimes|string|in:bundle,combo,set',
@@ -223,7 +225,7 @@ class BundleMenuController extends BaseApiController
                 'menu_name'   => $menu->name,
                 'menu_type'   => $menu->type,
                 'qty'         => $item['qty'],
-                'price_cents' => $menu->price_cents,
+                'price_rupiah' => $menu->price_rupiah,
                 'created_by'  => $createdBy,
             ];
         }

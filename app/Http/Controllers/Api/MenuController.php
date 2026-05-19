@@ -61,7 +61,7 @@ class MenuController extends BaseApiController
                 'id'          => $m->id,
                 'code'        => $m->code,
                 'name'        => $m->name,
-                'price_cents' => $m->price_cents,
+                'price_rupiah' => $m->price_rupiah,
                 'image_url'   => $m->image_url,
                 'enabled'     => $m->enabled,
                 'sort'        => $m->sort,
@@ -74,10 +74,12 @@ class MenuController extends BaseApiController
 
     public function store(Request $r)
     {
+        $this->mergeNormalizedInput($r);
+
         $data = $r->validate([
             'code'                       => 'required|string',
             'name'                       => 'required|string',
-            'price_cents'                => 'required|integer|min:0',
+            'price_rupiah'                => 'required|integer|min:0',
             'image_url'                  => 'nullable|string',
             'enabled'                    => 'nullable|boolean',
             'sort'                       => 'nullable|integer',
@@ -89,7 +91,7 @@ class MenuController extends BaseApiController
             'variants.*.kind'            => 'required_with:variants|in:drink,food',
             'variants.*.category'        => 'nullable|in:hot,ice',
             'variants.*.size'            => 'nullable|in:S,M,L',
-            'variants.*.price_cents'     => 'required_with:variants|integer|min:0',
+            'variants.*.price_rupiah'     => 'required_with:variants|integer|min:0',
         ]);
 
         $u = $this->currentUser($r);
@@ -99,7 +101,7 @@ class MenuController extends BaseApiController
             $menu = Menu::create([
                 'code'        => $data['code'],
                 'name'        => $data['name'],
-                'price_cents' => $data['price_cents'],
+                'price_rupiah' => $data['price_rupiah'],
                 'image_url'   => $data['image_url'] ?? null,
                 'enabled'     => $data['enabled'] ?? true,
                 'sort'        => $data['sort'] ?? 0,
@@ -121,7 +123,7 @@ class MenuController extends BaseApiController
     // {
     //     $data = $r->validate([
     //         'name'         => 'sometimes|string',
-    //         'price_cents'  => 'sometimes|integer|min:0',
+    //         'price_rupiah'  => 'sometimes|integer|min:0',
     //         'image_url'    => 'sometimes|nullable|string',
     //         'enabled'      => 'sometimes|boolean',
     //         'sort'         => 'sometimes|integer',
@@ -168,7 +170,7 @@ class MenuController extends BaseApiController
     //                     'kind'        => $v['kind'],
     //                     'category'    => $v['category'] ?? null,
     //                     'size'        => $v['size'] ?? null,
-    //                     'price_cents' => $v['price_cents'],
+    //                     'price_rupiah' => $v['price_rupiah'],
     //                     'created_by'  => $u?->id,
     //                 ]);
     //             }
@@ -182,7 +184,7 @@ class MenuController extends BaseApiController
 {
     $data = $r->validate([
         'name'         => 'sometimes|string',
-        'price_cents'  => 'sometimes|integer|min:0',
+        'price_rupiah'  => 'sometimes|integer|min:0',
         'image_url'    => 'sometimes|nullable|string',
         'enabled'      => 'sometimes|boolean',
         'sort'         => 'sometimes|integer',
@@ -307,7 +309,7 @@ class MenuController extends BaseApiController
                 'kind'        => $v['kind'],
                 'category'    => $v['category'] ?? null,
                 'size'        => $v['size'] ?? null,
-                'price_cents' => $v['price_cents'],
+                'price_rupiah' => $v['price_rupiah'],
                 'created_by'  => $userId,
             ];
         }
