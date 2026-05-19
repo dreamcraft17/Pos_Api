@@ -14,10 +14,16 @@ class OpenBillController extends Controller
     {
         $user = null;
 
+        $limit = max(1, min(
+            (int) $request->query('limit', config('pos.limits.open_bills_default', 100)),
+            config('pos.limits.open_bills_max', 500)
+        ));
+
         $rows = OpenBill::query()
             ->where('user_id', $user?->id)
             ->where('status', 'open')
             ->orderByDesc('id')
+            ->limit($limit)
             ->get();
 
         return response()->json($rows);

@@ -7,150 +7,18 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
-use App\Models\Product;
-use App\Models\MenuItem;
 use App\Models\StockMove;
-use App\Models\Discount;
 use App\Models\Refund;
 use App\Models\RefundItem;
+use App\Services\DiscountResolver;
+use App\Services\StockReductionService;
 
 class OrderController extends BaseApiController
 {
-    /** @return array{0: \Illuminate\Support\Collection<string, Product>, 1: \Illuminate\Support\Collection<string, \Illuminate\Support\Collection<int, MenuItem>>} */
-    private function preloadStockContext(array $items): array
-    {
-        $skus = [];
-        $menuCodes = [];
-
-        foreach ($items as $it) {
-            if (! empty($it['sku'])) {
-                $skus[] = $it['sku'];
-            } elseif (! empty($it['menu_code'])) {
-                $menuCodes[] = $it['menu_code'];
-            }
-        }
-
-        $menuComponents = MenuItem::whereIn('menu_code', array_unique($menuCodes))
-            ->get(['menu_code', 'product_sku', 'qty'])
-            ->groupBy('menu_code');
-
-        foreach ($menuComponents as $components) {
-            foreach ($components as $c) {
-                $skus[] = $c->product_sku;
-            }
-        }
-
-        $products = Product::whereIn('sku', array_unique(array_filter($skus)))->get()->keyBy('sku');
-
-        return [$products, $menuComponents];
-    }
-
-    /** @param \Illuminate\Support\Collection<int, OrderItem> $orderItems */
-    private function preloadRefundStockContext(array $items, $orderItems): array
-    {
-        $skus = [];
-        $menuCodes = [];
-
-        foreach ($items as $it) {
-            if (! empty($it['sku'])) {
-                $skus[] = $it['sku'];
-            } elseif (! empty($it['menu_code'])) {
-                $menuCodes[] = $it['menu_code'];
-            } elseif (! empty($it['order_item_id'])) {
-                $oi = $orderItems[$it['order_item_id']] ?? null;
-                if ($oi?->sku) {
-                    $skus[] = $oi->sku;
-                } elseif ($oi?->menu_code) {
-                    $menuCodes[] = $oi->menu_code;
-                }
-            }
-        }
-
-        $menuComponents = MenuItem::whereIn('menu_code', array_unique($menuCodes))
-            ->get(['menu_code', 'product_sku', 'qty'])
-            ->groupBy('menu_code');
-
-        foreach ($menuComponents as $components) {
-            foreach ($components as $c) {
-                $skus[] = $c->product_sku;
-            }
-        }
-
-        $products = Product::whereIn('sku', array_unique(array_filter($skus)))->get()->keyBy('sku');
-
-        return [$products, $menuComponents];
-    }
-
-    private function applyStockReduction(
-        array $it,
-        int $qtyMultiplier,
-        $products,
-        $menuComponents,
-        ?int $uId,
-        array &$stockMoves
-    ): void {
-        if (! empty($it['sku'])) {
-            $p = $products[$it['sku']] ?? null;
-            if ($p) {
-                $reduce = $qtyMultiplier;
-                $p->decrement('stock', $reduce);
-                $stockMoves[] = [
-                    'sku'        => $p->sku,
-                    'delta'      => -$reduce,
-                    'reason'     => 'order direct item',
-                    'created_by' => $uId,
-                ];
-            }
-
-            return;
-        }
-
-        if (empty($it['menu_code'])) {
-            return;
-        }
-
-        foreach ($menuComponents[$it['menu_code']] ?? [] as $c) {
-            $p = $products[$c->product_sku] ?? null;
-            if (! $p) {
-                continue;
-            }
-            $reduceBy = $c->qty * $qtyMultiplier;
-            $p->decrement('stock', $reduceBy);
-            $stockMoves[] = [
-                'sku'        => $p->sku,
-                'delta'      => -$reduceBy,
-                'reason'     => 'order menu component',
-                'created_by' => $uId,
-            ];
-        }
-    }
-
-    private function resolveDiscount(?array $d, int $subtotal): array
-    {
-        if (!$d) return [0, null];
-        $payload = $d;
-        if (!empty($d['code'])) {
-            $found = Discount::where('code',$d['code'])->first();
-            if ($found && $found->enabled) {
-                $payload = ['code'=>$found->code,'kind'=>$found->kind,'value'=>$found->value];
-                if ($found->kind === 'percent') {
-                    $off = (int) round($subtotal * (float)$found->value / 100.0);
-                    return [min($subtotal, $off), $payload];
-                } else {
-                    return [min($subtotal, (int)round($found->value)), $payload];
-                }
-            }
-        }
-        if (!empty($d['kind']) && isset($d['value'])) {
-            if ($d['kind'] === 'percent') {
-                $off = (int) round($subtotal * (float)$d['value'] / 100.0);
-                return [min($subtotal, $off), $payload];
-            } else {
-                return [min($subtotal, (int)round($d['value'])), $payload];
-            }
-        }
-        return [0, null];
-    }
+    public function __construct(
+        private StockReductionService $stock,
+        private DiscountResolver $discountResolver,
+    ) {}
 
     public function store(Request $r)
     {
@@ -160,6 +28,7 @@ class OrderController extends BaseApiController
             'items.*.price_cents' => 'required|integer|min:0',
             'items.*.sku' => 'nullable|string',
             'items.*.menu_code' => 'nullable|string',
+            'items.*.bundle_code' => 'nullable|string',
             'items.*.name' => 'nullable|string',
             'items.*.temp' => 'nullable|in:ice,hot',
             'items.*.size' => 'nullable|in:S,M,L',
@@ -175,7 +44,7 @@ class OrderController extends BaseApiController
         $uId = $this->currentUser($r)?->id;
 
         $subtotal = collect($data['items'])->sum(fn($it) => $it['price_cents'] * $it['qty']);
-        [$discountCents, $discountMeta] = $this->resolveDiscount($data['discount'] ?? null, $subtotal);
+        [$discountCents, $discountMeta] = $this->discountResolver->resolve($data['discount'] ?? null, $subtotal);
 
         // $taxRate = $data['tax_rate'] ?? 0;
         // $tax = (int) round(($subtotal - $discountCents) * $taxRate);
@@ -197,7 +66,7 @@ class OrderController extends BaseApiController
         $orderType = $data['order_type'] ?? ($data['sales_type'] ?? null) ?? ($data['type'] ?? null);
 
         $order = DB::transaction(function () use ($data, $uId, $subtotal, $discountCents, $serviceCents, $tax, $total, $orderType) {
-            [$products, $menuComponents] = $this->preloadStockContext($data['items']);
+            $stockCtx = $this->stock->preload($data['items']);
 
             $order = Order::create([
                 'subtotal_cents' => $subtotal,
@@ -218,6 +87,7 @@ class OrderController extends BaseApiController
                     'order_id'    => $order->id,
                     'sku'         => $it['sku'] ?? null,
                     'menu_code'   => $it['menu_code'] ?? null,
+                    'bundle_code' => $it['bundle_code'] ?? null,
                     'qty'         => $it['qty'],
                     'price_cents' => $it['price_cents'],
                     'name'        => $it['name'] ?? null,
@@ -226,7 +96,7 @@ class OrderController extends BaseApiController
                     'created_by'  => $uId,
                 ];
 
-                $this->applyStockReduction($it, (int) $it['qty'], $products, $menuComponents, $uId, $stockMoves);
+                $this->stock->reduce($it, (int) $it['qty'], $stockCtx, $stockMoves, $uId);
             }
 
             if ($orderItemRows !== []) {
@@ -275,7 +145,10 @@ class OrderController extends BaseApiController
             $q->where('created_at', '>=', $since);
         }
 
-        $limit = max(1, min((int) $r->query('limit', 500), 2000));
+        $limit = max(1, min(
+            (int) $r->query('limit', config('pos.limits.orders_default', 500)),
+            config('pos.limits.orders_max', 2000)
+        ));
         $q->limit($limit);
 
         $q->addSelect([
@@ -285,7 +158,7 @@ class OrderController extends BaseApiController
                 ->whereColumn('order_id', 'orders.id'),
         ]);
 
-        return $q->orderByDesc('id')->get([
+        $columns = [
             'id',
             'subtotal_cents',
             'discount_cents',
@@ -293,12 +166,16 @@ class OrderController extends BaseApiController
             'tax_cents',
             'total_cents',
             'order_type',
-            'payload',
             'created_at',
-            // kolom subselect juga ikut terambil:
             'refunds_count',
             'refund_total_cents',
-        ]);
+        ];
+
+        if ($r->boolean('include_payload')) {
+            $columns[] = 'payload';
+        }
+
+        return $q->orderByDesc('id')->get($columns);
     }
 
     public function show(Request $r, $id)
@@ -525,6 +402,7 @@ class OrderController extends BaseApiController
         'items.*.order_item_id'    => 'nullable|integer',
         'items.*.sku'              => 'nullable|string',
         'items.*.menu_code'        => 'nullable|string',
+        'items.*.bundle_code'      => 'nullable|string',
         'items.*.qty'              => 'required|integer|min:1',
         'items.*.unit_price_cents' => 'nullable|integer|min:0',
         'items.*.name'             => 'nullable|string', // TAMBAHAN: nama item
@@ -614,9 +492,9 @@ class OrderController extends BaseApiController
         'total_refund_cents'    => $totalRefund,
     ];
 
-    [$products, $menuComponents] = $this->preloadRefundStockContext($data['items'], $orderItems);
+    $stockCtx = $this->stock->preload($data['items'], $orderItems);
 
-    $refund = DB::transaction(function () use ($data, $order, $totalRefund, $orderItems, $calc, $refundItemsDetails, $isPaid, $products, $menuComponents) {
+    $refund = DB::transaction(function () use ($data, $order, $totalRefund, $orderItems, $calc, $refundItemsDetails, $isPaid, $stockCtx) {
         $payload = [
             'items' => $refundItemsDetails,
             'reason' => $data['reason'] ?? null,
@@ -632,23 +510,6 @@ class OrderController extends BaseApiController
         ]);
 
         $stockMoves = [];
-
-        $restockSku = function (string $sku, int $inc) use ($products, &$stockMoves) {
-            if ($inc <= 0) {
-                return;
-            }
-            $p = $products[$sku] ?? null;
-            if (! $p) {
-                return;
-            }
-            $p->increment('stock', $inc);
-            $stockMoves[] = [
-                'sku'    => $p->sku,
-                'delta'  => $inc,
-                'reason' => 'refund',
-            ];
-        };
-
         $refundItemRows = [];
         $now = now();
 
@@ -666,22 +527,7 @@ class OrderController extends BaseApiController
                 'updated_at'       => $now,
             ];
 
-            if (! empty($it['sku'])) {
-                $restockSku($it['sku'], (int) $it['qty']);
-            } elseif (! empty($it['menu_code'])) {
-                foreach ($menuComponents[$it['menu_code']] ?? [] as $c) {
-                    $restockSku($c->product_sku, (int) $c->qty * (int) $it['qty']);
-                }
-            } else {
-                $oi = ! empty($it['order_item_id']) ? ($orderItems[$it['order_item_id']] ?? null) : null;
-                if ($oi && ! empty($oi->sku)) {
-                    $restockSku($oi->sku, (int) $it['qty']);
-                } elseif ($oi && ! empty($oi->menu_code)) {
-                    foreach ($menuComponents[$oi->menu_code] ?? [] as $c) {
-                        $restockSku($c->product_sku, (int) $c->qty * (int) $it['qty']);
-                    }
-                }
-            }
+            $this->stock->restock($it, (int) $it['qty'], $stockCtx, $stockMoves, $orderItems);
         }
 
         if ($refundItemRows !== []) {

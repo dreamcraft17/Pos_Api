@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\CachesSchemaColumns;
+use App\Services\MasterDataCache;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Models\Menu;
 use App\Models\MenuItem;
@@ -16,7 +18,17 @@ class MenuController extends BaseApiController
     public function index(Request $r)
     {
         $u = $this->currentUser($r);
+        $userId = $u?->id;
 
+        return Cache::remember(
+            MasterDataCache::menusKey($userId),
+            MasterDataCache::ttl(),
+            fn () => $this->buildMenusResponse($u)
+        );
+    }
+
+    private function buildMenusResponse($u)
+    {
         $q = Menu::query();
         if ($u) {
             $q->where('created_by', $u->id);
@@ -26,7 +38,7 @@ class MenuController extends BaseApiController
         $codes = $menus->pluck('code')->all();
 
         if ($codes === []) {
-            return collect();
+            return [];
         }
 
         $itemsQ = MenuItem::whereIn('menu_code', $codes);
@@ -44,7 +56,7 @@ class MenuController extends BaseApiController
         $items    = $itemsQ->get()->groupBy('menu_code');
         $variants = $varsQ->get()->groupBy('menu_code');
 
-        return $menus->map(function($m) use ($items, $variants) {
+        return $menus->map(function ($m) use ($items, $variants) {
             return [
                 'id'          => $m->id,
                 'code'        => $m->code,
@@ -57,7 +69,7 @@ class MenuController extends BaseApiController
                 'components'  => ($items[$m->code] ?? collect())->values(),
                 'variants'    => ($variants[$m->code] ?? collect())->values(),
             ];
-        });
+        })->values()->all();
     }
 
     public function store(Request $r)
@@ -95,30 +107,10 @@ class MenuController extends BaseApiController
                 'type'        => $data['type'] ?? null,
             ]);
 
-            // === Pakai menu_code (BUKAN menu_id) ===
-            if (!empty($data['components'])) {
-                foreach ($data['components'] as $c) {
-                    MenuItem::create([
-                        'menu_code'   => $menu->code,
-                        'product_sku' => $c['product_sku'],
-                        'qty'         => $c['qty'],
-                        'created_by'  => $u?->id,
-                    ]);
-                }
-            }
+            $this->insertMenuItems($menu->code, $data['components'] ?? [], $u?->id);
+            $this->insertMenuVariants($menu->code, $data['variants'] ?? [], $u?->id);
 
-            if (!empty($data['variants'])) {
-                foreach ($data['variants'] as $v) {
-                    MenuVariant::create([
-                        'menu_code'   => $menu->code,
-                        'kind'        => $v['kind'],
-                        'category'    => $v['category'] ?? null,
-                        'size'        => $v['size'] ?? null,
-                        'price_cents' => $v['price_cents'],
-                        'created_by'  => $u?->id,
-                    ]);
-                }
-            }
+            MasterDataCache::forgetMenus($u?->id);
 
             return ['ok' => true, 'id' => $menu->id];
         });
@@ -214,14 +206,7 @@ class MenuController extends BaseApiController
                     fn($q) => $q->where('created_by', $u->id))
                 ->delete();
 
-            foreach ($data['components'] ?? [] as $c) {
-                MenuItem::create([
-                    'menu_code'   => $menu->code,
-                    'product_sku' => $c['product_sku'],
-                    'qty'         => $c['qty'],
-                    'created_by'  => $u?->id,
-                ]);
-            }
+            $this->insertMenuItems($menu->code, $data['components'] ?? [], $u?->id);
         }
 
         if (array_key_exists('variants', $data)) {
@@ -230,17 +215,10 @@ class MenuController extends BaseApiController
                     fn($q) => $q->where('created_by', $u->id))
                 ->delete();
 
-            foreach ($data['variants'] ?? [] as $v) {
-                MenuVariant::create([
-                    'menu_code'   => $menu->code,
-                    'kind'        => $v['kind'],
-                    'category'    => $v['category'] ?? null,
-                    'size'        => $v['size'] ?? null,
-                    'price_cents' => $v['price_cents'],
-                    'created_by'  => $u?->id,
-                ]);
-            }
+            $this->insertMenuVariants($menu->code, $data['variants'] ?? [], $u?->id);
         }
+
+        MasterDataCache::forgetMenus($u?->id);
 
         return ['ok' => true];
     });
@@ -294,7 +272,45 @@ class MenuController extends BaseApiController
 
         $menu->delete();
 
+        MasterDataCache::forgetMenus($u?->id);
+
         return ['ok' => true];
     });
+    }
+
+    private function insertMenuItems(string $menuCode, array $components, ?int $userId): void
+    {
+        if ($components === []) {
+            return;
+        }
+        $rows = [];
+        foreach ($components as $c) {
+            $rows[] = [
+                'menu_code'   => $menuCode,
+                'product_sku' => $c['product_sku'],
+                'qty'         => $c['qty'],
+                'created_by'  => $userId,
+            ];
+        }
+        MenuItem::insert($rows);
+    }
+
+    private function insertMenuVariants(string $menuCode, array $variants, ?int $userId): void
+    {
+        if ($variants === []) {
+            return;
+        }
+        $rows = [];
+        foreach ($variants as $v) {
+            $rows[] = [
+                'menu_code'   => $menuCode,
+                'kind'        => $v['kind'],
+                'category'    => $v['category'] ?? null,
+                'size'        => $v['size'] ?? null,
+                'price_cents' => $v['price_cents'],
+                'created_by'  => $userId,
+            ];
+        }
+        MenuVariant::insert($rows);
     }
 }

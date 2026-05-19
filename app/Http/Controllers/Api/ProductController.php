@@ -299,7 +299,9 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\MasterDataCache;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Models\Product;
 use App\Models\StockMove;
@@ -315,22 +317,21 @@ class ProductController extends BaseApiController
 
         if ($updatedSince) {
             $q->where('updated_at', '>=', $updatedSince);
+
+            return $q->orderBy('id')->get([
+                'id', 'sku', 'name', 'price_cents', 'stock', 'category',
+                'unit', 'min_qty', 'mandarin', 'brand', 'station', 'updated_at',
+            ]);
         }
 
-        return $q->orderBy('id')->get([
-            'id',
-            'sku',
-            'name',
-            'price_cents',
-            'stock',
-            'category',
-            'unit',
-            'min_qty',
-            'mandarin',
-            'brand',
-            'station',
-            'updated_at',
-        ]);
+        return Cache::remember(
+            MasterDataCache::productsKey(null),
+            MasterDataCache::ttl(),
+            fn () => $q->orderBy('id')->get([
+                'id', 'sku', 'name', 'price_cents', 'stock', 'category',
+                'unit', 'min_qty', 'mandarin', 'brand', 'station', 'updated_at',
+            ])
+        );
     }
 
     public function store(Request $r)
@@ -373,6 +374,8 @@ class ProductController extends BaseApiController
 
         $prod->save();
 
+        MasterDataCache::forgetProducts();
+
         return ['ok' => true];
     }
 
@@ -397,6 +400,8 @@ class ProductController extends BaseApiController
         Product::where('sku', $sku)
             ->where('is_deleted', false)
             ->update($data + ['updated_at' => now()]);
+
+        MasterDataCache::forgetProducts();
 
         return ['ok' => true];
     }
@@ -439,6 +444,8 @@ class ProductController extends BaseApiController
             ]);
         });
 
+        MasterDataCache::forgetProducts();
+
         return ['ok' => true];
     }
 
@@ -454,6 +461,8 @@ class ProductController extends BaseApiController
                 404
             );
         }
+
+        MasterDataCache::forgetProducts();
 
         return ['ok' => true, 'deleted' => $affected, 'soft' => true];
     }

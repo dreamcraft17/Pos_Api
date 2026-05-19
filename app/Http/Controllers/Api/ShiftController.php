@@ -12,7 +12,10 @@ use App\Models\Order;
 class ShiftController extends BaseApiController
 {
     // ✅ Cache duration untuk active summary (10 detik)
-    private const CACHE_TTL = 10;
+    private function cacheTtl(): int
+    {
+        return config('pos.cache.shift_summary_ttl', 10);
+    }
 
     public function index(Request $r)
     {
@@ -115,7 +118,7 @@ class ShiftController extends BaseApiController
             $cacheKey = "active_shift_summary_" . ($userId ?? 'public');
 
             // ✅ Cache selama 10 detik (auto-refresh client juga 10 detik)
-            return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($u, $userId) {
+            return Cache::remember($cacheKey, $this->cacheTtl(), function () use ($u, $userId) {
                 return $this->computeActiveSummary($u, $userId);
             });
         } catch (\Throwable $e) {
@@ -238,12 +241,7 @@ class ShiftController extends BaseApiController
         $orderIdsSub = $baseOrders->select('id');
 
         $paymentsAgg = DB::table('payments')
-            ->whereDate('created_at', $today)
-            ->when($userId, function ($q) use ($userId) {
-                return $q->whereIn('order_id', 
-                    Order::query()->where('created_by', $userId)->select('id')
-                );
-            })
+            ->whereIn('order_id', $orderIdsSub)
             ->select('method')
             ->selectRaw('SUM(amount_cents) as total_cents')
             ->groupBy('method')

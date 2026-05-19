@@ -118,15 +118,17 @@ class Order extends Model
         return $this->hasMany(Refund::class);
     }
 
-    // Hitung total yang sudah dibayar (berdasarkan payments)
-    public function getPaidAmountCentsAttribute()
+    public function getPaidAmountCentsAttribute(): int
     {
-        return $this->payments()->sum('amount_cents');
+        if ($this->relationLoaded('payments')) {
+            return (int) $this->payments->sum('amount_cents');
+        }
+
+        return (int) $this->payments()->sum('amount_cents');
     }
 
-    // Hitung sisa yang harus dibayar setelah refund
-    public function getRemainingBalanceCentsAttribute()
+    public function getRemainingBalanceCentsAttribute(): int
     {
-        return $this->paid_amount_cents - $this->refund_total_cents;
+        return $this->paid_amount_cents - (int) ($this->refund_total_cents ?? 0);
     }
 }

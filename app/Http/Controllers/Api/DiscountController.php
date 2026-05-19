@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\MasterDataCache;
 use Illuminate\Http\Request;
 use App\Models\Discount;
 
@@ -37,6 +38,8 @@ class DiscountController extends BaseApiController
                 'created_by'=>$u?->id,
             ]
         );
+        MasterDataCache::forgetDiscounts();
+
         return ['ok'=>true];
     }
 
@@ -50,12 +53,16 @@ class DiscountController extends BaseApiController
             'sort'=>'sometimes|integer',
         ]);
         Discount::where('code',$code)->update($data);
+        MasterDataCache::forgetDiscounts();
+
         return ['ok'=>true];
     }
 
     public function destroy($code)
     {
         Discount::where('code',$code)->delete();
+        MasterDataCache::forgetDiscounts();
+
         return ['ok'=>true];
     }
 }

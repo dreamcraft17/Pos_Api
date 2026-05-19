@@ -132,14 +132,45 @@ Tanpa optimasi, operasi seperti **buat order** bisa menjalankan puluhan query (s
 | **GET `/stock-moves`** | Parameter `limit` (default 500, max 5000) | Riwayat stok terbatas |
 | **Shift `active-summary`** | Cache 10 detik + query agregat SQL | Dashboard kasir tidak hammer DB |
 | **Index database** | Migration `2026_05_19_000000_add_performance_indexes` | Filter `created_by`, tanggal, SKU lebih cepat |
+| **GET `/orders`** | `payload` tidak dikirim default; pakai `?include_payload=1` | Response list jauh lebih kecil |
+| **Bundle di order** | `StockReductionService` + `bundle_code` di item | Stok bundle/menu/produk sekali preload |
+| **Cache master data** | `MasterDataCache` untuk products, menus, bundles, discounts | Sync POS berulang tidak hit DB tiap kali |
+| **Menu/bundle write** | Batch `insert()` untuk anak | Simpan menu/bundle lebih cepat |
+| **Stock request WA** | Job `SendStockRequestWhatsApp` (queue) | Request API tidak nunggu Fonnte |
+| **Rate limit API** | 300 req/menit per user atau IP | Lindungi dari spam / loop client |
+| **CookieAuth** | Verifikasi signature cookie `uid` | Auth tanpa `dd()` debug |
 
 ### Parameter query opsional
 
 ```http
 GET /api/orders?since=2026-05-01T00:00:00&limit=200
+GET /api/orders?include_payload=1
 GET /api/stock-moves?sku=KOPI-001&limit=100
 GET /api/products?updatedSince=2026-05-18T10:00:00
+GET /api/open-bills?limit=50
 ```
+
+### Queue WhatsApp (stock request)
+
+```bash
+# .env
+QUEUE_CONNECTION=database
+FONNTE_TOKEN=...
+SUPPLIER_WHATSAPP=628xxxxxxxx
+
+# Jalankan worker
+php artisan queue:work
+```
+
+Tanpa worker, set `QUEUE_CONNECTION=sync` — pengiriman tetap jalan, hanya blocking seperti sebelumnya.
+
+### Konfigurasi cache (`config/pos.php`)
+
+| Env | Default | Fungsi |
+|-----|---------|--------|
+| `POS_MASTER_CACHE_TTL` | 300 | TTL cache products/menus/bundles |
+| `POS_DISCOUNT_CACHE_TTL` | 300 | TTL cache diskon aktif |
+| `POS_SHIFT_SUMMARY_TTL` | 10 | TTL ringkasan shift aktif |
 
 ### Development: deteksi lazy loading
 
@@ -157,7 +188,15 @@ app/
       CachesSchemaColumns.php
     Middleware/
       CookieAuth.php
+  Jobs/
+    SendStockRequestWhatsApp.php
+  Services/
+    StockReductionService.php
+    DiscountResolver.php
+    MasterDataCache.php
   Models/                # Order, Product, Menu, Shift, …
+config/
+  pos.php                # TTL cache, limit, Fonnte
 database/
   migrations/            # Skema + index performa
 routes/
@@ -188,7 +227,8 @@ Lihat `routes/api.php` untuk daftar lengkap.
 ## Catatan pengembangan
 
 - **Uang:** selalu gunakan field `*_cents` (integer).
-- **Stok order:** langsung SKU → kurangi 1 produk; `menu_code` → kurangi semua komponen di `menu_items`.
+- **Stok order:** `sku` → produk langsung; `menu_code` → komponen `menu_items`; `bundle_code` → komponen bundle (menu + produk).
+- **Order list:** tambahkan `?include_payload=1` hanya jika client butuh JSON penuh per order.
 - **Refund:** qty divalidasi agar tidak melebihi yang sudah dibeli minus yang sudah direfund.
 - Setelah menambah migration baru, jalankan `php artisan migrate`.
 

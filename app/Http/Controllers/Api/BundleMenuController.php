@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\CachesSchemaColumns;
 use App\Models\Menu;
+use App\Services\MasterDataCache;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Models\BundleMenu;
 use App\Models\BundleMenuItem;
@@ -16,7 +18,17 @@ class BundleMenuController extends BaseApiController
     public function index(Request $r)
     {
         $u = $this->currentUser($r);
+        $userId = $u?->id;
 
+        return Cache::remember(
+            MasterDataCache::bundlesKey($userId),
+            MasterDataCache::ttl(),
+            fn () => $this->buildBundlesResponse($u)
+        );
+    }
+
+    private function buildBundlesResponse($u)
+    {
         $q = BundleMenu::query();
         if ($u) {
             $q->where('created_by', $u->id);
@@ -26,7 +38,7 @@ class BundleMenuController extends BaseApiController
         $bundleCodes = $bundles->pluck('bundle_code')->all();
 
         if ($bundleCodes === []) {
-            return collect();
+            return [];
         }
 
         $bundleItemsQ = BundleMenuItem::whereIn('bundle_code', $bundleCodes);
@@ -71,7 +83,7 @@ class BundleMenuController extends BaseApiController
                 'created_by' => $bundle->created_by,
                 'created_by_id' => $bundle->created_by_id,
             ];
-        });
+        })->values()->all();
     }
 
     public function store(Request $r)
@@ -110,34 +122,10 @@ class BundleMenuController extends BaseApiController
                 ->get()
                 ->keyBy('code');
 
-            foreach ($data['bundle_items'] as $item) {
-                $menu = $menus[$item['menu_code']] ?? null;
-                if (! $menu) {
-                    continue;
-                }
+            $this->insertBundleItems($bundle->bundle_code, $data['bundle_items'], $menus, $u?->username);
+            $this->insertBundleComponents($bundle->bundle_code, $data['components'] ?? [], $u?->username);
 
-                BundleMenuItem::create([
-                    'bundle_code' => $bundle->bundle_code,
-                    'menu_code' => $item['menu_code'],
-                    'menu_name' => $menu->name,
-                    'menu_type' => $menu->type,
-                    'qty' => $item['qty'],
-                    'price_cents' => $menu->price_cents,
-                    'created_by' => $u?->username,
-                ]);
-            }
-
-            // Tambahkan components jika ada
-            if (!empty($data['components'])) {
-                foreach ($data['components'] as $component) {
-                    BundleComponent::create([
-                        'bundle_code' => $bundle->bundle_code,
-                        'product_sku' => $component['product_sku'],
-                        'qty' => $component['qty'],
-                        'created_by' => $u?->username,
-                    ]);
-                }
-            }
+            MasterDataCache::forgetBundles($u?->id);
 
             return response()->json(['ok' => true, 'id' => $bundle->id, 'code' => $bundle->bundle_code]);
         });
@@ -175,40 +163,19 @@ class BundleMenuController extends BaseApiController
                     ->get()
                     ->keyBy('code');
 
-                foreach ($data['bundle_items'] as $item) {
-                    $menu = $menus[$item['menu_code']] ?? null;
-                    if (! $menu) {
-                        continue;
-                    }
-
-                    BundleMenuItem::create([
-                        'bundle_code' => $code,
-                        'menu_code' => $item['menu_code'],
-                        'menu_name' => $menu->name,
-                        'menu_type' => $menu->type,
-                        'qty' => $item['qty'],
-                        'price_cents' => $menu->price_cents,
-                        'created_by' => $u?->username,
-                    ]);
-                }
+                $this->insertBundleItems($code, $data['bundle_items'], $menus, $u?->username);
             }
 
-            // Update components jika dikirim
             if (array_key_exists('components', $data)) {
                 BundleComponent::where('bundle_code', $code)
                     ->when($u && $this->tableHasColumn('bundle_components', 'created_by'),
                         fn($q) => $q->where('created_by', $u->username))
                     ->delete();
 
-                foreach ($data['components'] as $component) {
-                    BundleComponent::create([
-                        'bundle_code' => $code,
-                        'product_sku' => $component['product_sku'],
-                        'qty' => $component['qty'],
-                        'created_by' => $u?->username,
-                    ]);
-                }
+                $this->insertBundleComponents($code, $data['components'], $u?->username);
             }
+
+            MasterDataCache::forgetBundles($u?->id);
 
             return ['ok' => true];
         });
@@ -236,7 +203,49 @@ class BundleMenuController extends BaseApiController
 
             $bundle->delete();
 
+            MasterDataCache::forgetBundles($u?->id);
+
             return ['ok' => true];
         });
+    }
+
+    private function insertBundleItems(string $bundleCode, array $items, $menus, ?string $createdBy): void
+    {
+        $rows = [];
+        foreach ($items as $item) {
+            $menu = $menus[$item['menu_code']] ?? null;
+            if (! $menu) {
+                continue;
+            }
+            $rows[] = [
+                'bundle_code' => $bundleCode,
+                'menu_code'   => $item['menu_code'],
+                'menu_name'   => $menu->name,
+                'menu_type'   => $menu->type,
+                'qty'         => $item['qty'],
+                'price_cents' => $menu->price_cents,
+                'created_by'  => $createdBy,
+            ];
+        }
+        if ($rows !== []) {
+            BundleMenuItem::insert($rows);
+        }
+    }
+
+    private function insertBundleComponents(string $bundleCode, array $components, ?string $createdBy): void
+    {
+        if ($components === []) {
+            return;
+        }
+        $rows = [];
+        foreach ($components as $component) {
+            $rows[] = [
+                'bundle_code' => $bundleCode,
+                'product_sku' => $component['product_sku'],
+                'qty'         => $component['qty'],
+                'created_by'  => $createdBy,
+            ];
+        }
+        BundleComponent::insert($rows);
     }
 }

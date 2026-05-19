@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendStockRequestWhatsApp;
 use App\Models\StockRequest;
 use App\Models\StockRequestItem;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -56,14 +56,18 @@ class StockRequestController extends Controller
             'approval_state' => 'pending',
         ]);
 
+        $itemRows = [];
         foreach ($normalized as $row) {
-            StockRequestItem::create([
+            $itemRows[] = [
                 'stock_request_id' => $req->id,
                 'name'             => $row['name'],
                 'request_qty'      => $row['request_qty'],
                 'unit'             => $row['unit'],
                 'note'             => $row['note'],
-            ]);
+            ];
+        }
+        if ($itemRows !== []) {
+            StockRequestItem::insert($itemRows);
         }
 
         // ============ 2) Rakit Pesan WhatsApp ============
@@ -89,67 +93,28 @@ class StockRequestController extends Controller
 
         $message .= "\nPlease Proceed / buy as soon as possible 🙏";
 
-        // ============ 3) Kirim ke Fonnte ============
-        $token       = env('FONNTE_TOKEN');
-        $targetPhone = env('SUPPLIER_WHATSAPP', env('ADMIN_WHATSAPP'));
-        $waApiUrl    = 'https://api.fonnte.com/send';
-        $targetPhone = $this->normalizePhone((string)$targetPhone);
+        $targetPhone = $this->normalizePhone((string) config('pos.fonnte.target'));
 
-        if (!$token || !$targetPhone) {
+        if (! config('pos.fonnte.token') || ! $targetPhone) {
             $req->update(['status' => 'failed']);
+
             return response()->json(['message' => 'Fonnte token or target phone not configured'], 500);
         }
 
-        $req->update(['wa_target' => $targetPhone]);
+        $req->update(['status' => 'pending', 'wa_target' => $targetPhone]);
 
-        $response = Http::withHeaders([
-            'Authorization' => $token,
-        ])->asForm()->post($waApiUrl, [
-            'target'  => $targetPhone,
-            'message' => $message,
-        ]);
-
-        // ============ 4) Update Status ============
-        $req->wa_response_code = $response->status();
-        $req->wa_response_body = $response->body();
-
-        if ($response->failed()) {
-            $req->status = 'failed';
-            $req->save();
-
-            Log::error('Fonnte send failed', [
-                'stock_request_id' => $req->id,
-                'status' => $response->status(),
-                'body'   => $response->body(),
-            ]);
-
-            return response()->json([
-                'message' => 'Failed to send WhatsApp message',
-                'error'   => $response->body(),
-                'request_id' => $req->id,
-            ], 500);
-        }
-
-        $req->status  = 'sent';
-        $req->sent_at = $nowJakarta;
-        $req->save();
-
-        Log::info('Fonnte send OK', [
-            'stock_request_id' => $req->id,
-            'target'   => $targetPhone,
-            'response' => $response->body(),
-        ]);
+        SendStockRequestWhatsApp::dispatch($req->id, $message, $targetPhone);
 
         return response()->json([
-            'message'        => 'Stock request sent successfully',
+            'message'        => 'Stock request queued for WhatsApp delivery',
             'request_id'     => $req->id,
             'requested_by'   => $requestedBy,
             'items_count'    => count($normalized),
-            'has_notes'      => !empty($notes),
-            'sent_at'        => $sentAtText,
-            'status'         => 'sent',
+            'has_notes'      => ! empty($notes),
+            'queued_at'      => $sentAtText,
+            'status'         => 'pending',
             'request_status' => $req->request_status,
-        ]);
+        ], 202);
     }
 
     public function index(Request $request)
@@ -226,7 +191,9 @@ public function updateStatus(Request $request, $id)
 
     // ✅ Jika mau pindah ke Delivery → semua item wajib ada tracking_number
     if ($data['request_status'] === 'Delivery') {
-        $missing = $sr->items()->whereNull('tracking_number')->orWhere('tracking_number','')->count();
+        $missing = $sr->items->filter(
+            fn ($item) => empty($item->tracking_number)
+        )->count();
         if ($missing > 0) {
             return response()->json([
                 'success' => false,
