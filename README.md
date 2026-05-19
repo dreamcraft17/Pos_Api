@@ -1,61 +1,199 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# POS API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Backend REST API untuk aplikasi **Point of Sale (POS)** — kasir, manajemen menu, stok, transaksi, shift kasir, dan sinkronisasi data ke client (biasanya aplikasi mobile/desktop).
 
-## About Laravel
+Dibangun dengan **Laravel 12** dan **PHP 8.2+**. Semua endpoint API berada di prefix `/api`.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Untuk apa project ini?
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+API ini menjadi **sumber data pusat** antara database dan aplikasi kasir. Client memanggil API untuk:
 
-## Learning Laravel
+| Kebutuhan bisnis | Contoh endpoint |
+|------------------|-----------------|
+| Login & identitas kasir | `POST /api/auth/login`, `GET /api/auth/me` |
+| Master produk & stok | `GET/POST /api/products`, `POST /api/products/{sku}/stock` |
+| Menu jual (dengan komponen & varian) | `GET/POST /api/menus` |
+| Paket / bundle menu | `GET/POST /api/bundle-menus` |
+| Transaksi penjualan | `POST /api/orders`, `GET /api/orders` |
+| Refund parsial / penuh | `POST /api/orders/{id}/refund` |
+| Bill belum dibayar (open bill) | `GET/POST /api/open-bills` |
+| Metode bayar, diskon, tipe order | `/api/payment-methods`, `/api/discounts`, `/api/order-types` |
+| Riwayat pergerakan stok | `GET /api/stock-moves` |
+| Permintaan stok antar outlet | `/api/stock-requests` |
+| Shift kasir & ringkasan harian | `/api/shifts`, `/api/shifts/active-summary` |
+| Health check deploy | `GET /api/health`, `GET /api/db-check` |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+**Alur tipikal:** client sync master data (produk, menu) → kasir buat order → stok berkurang otomatis dari SKU atau resep menu → pembayaran tercatat → shift ditutup dengan ringkasan penjualan.
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+---
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Arsitektur singkat
 
-## Laravel Sponsors
+```
+[Aplikasi POS Client]
+        │
+        │  HTTP JSON (/api/...)
+        ▼
+[Laravel POS API]  ──►  MySQL / MariaDB
+        │
+        ├── Models (Order, Product, Menu, Shift, …)
+        ├── Controllers di app/Http/Controllers/Api/
+        └── Middleware CookieAuth (session user opsional)
+```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+- Harga disimpan dalam **sen** (`*_cents`) untuk menghindari floating point.
+- Order menyimpan snapshot payload JSON + baris `order_items` / `payments`.
+- Menu bisa punya **komponen** (`menu_items` → `product_sku` + qty): saat order, stok produk komponen dikurangi otomatis.
+- Multi-user: banyak entitas punya `created_by` agar data per kasir/outlet tidak bentrok.
 
-### Premium Partners
+---
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+## Persyaratan
 
-## Contributing
+- PHP ≥ 8.2 (extension: `pdo_mysql`, `mbstring`, `openssl`, …)
+- Composer
+- MySQL / MariaDB (atau SQLite untuk development)
+- Web server: Laragon, `php artisan serve`, atau Nginx/Apache
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+## Instalasi
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+# Clone / masuk ke folder project
+cd pos-api
 
-## Security Vulnerabilities
+# Dependensi
+composer install
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+# Environment
+cp .env.example .env
+php artisan key:generate
 
-## License
+# Sesuaikan .env — contoh MySQL (Laragon)
+# DB_CONNECTION=mysql
+# DB_HOST=127.0.0.1
+# DB_PORT=3306
+# DB_DATABASE=pos
+# DB_USERNAME=root
+# DB_PASSWORD=
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+# Migrasi database (termasuk index performa)
+php artisan migrate
+
+# Jalankan server development
+php artisan serve
+# API: http://127.0.0.1:8000/api/health
+```
+
+### Production (disarankan)
+
+```bash
+composer install --no-dev --optimize-autoloader
+php artisan config:cache
+php artisan route:cache
+php artisan migrate --force
+```
+
+---
+
+## Autentikasi
+
+- Registrasi / login: `POST /api/auth/register`, `POST /api/auth/login`
+- Beberapa route shift memakai middleware `auth:sanctum`
+- Middleware `CookieAuth` di grup `api` mendukung client yang mengirim cookie/session
+- Helper `currentUser()` di `BaseApiController` mengambil user dari attribute request, Sanctum, atau `auth()`
+
+---
+
+## Optimasi query & performa
+
+Bagian ini menjelaskan **apa** yang dioptimasi dan **untuk apa**, agar API tetap responsif saat banyak transaksi atau sync data besar.
+
+### Masalah yang diselesaikan
+
+Tanpa optimasi, operasi seperti **buat order** bisa menjalankan puluhan query (satu query per item untuk produk, komponen menu, insert baris). Itu memperlambat kasir dan membebani database.
+
+### Yang sudah diterapkan
+
+| Area | Teknik | Manfaat |
+|------|--------|---------|
+| **POST `/orders`** | Preload semua SKU + komponen menu dengan `whereIn`, lalu **satu** query produk | Tidak ada N+1 per item |
+| **POST `/orders`** | `OrderItem::insert`, `Payment::insert`, `StockMove::insert` batch | Lebih sedikit round-trip ke DB |
+| **GET `/orders/{id}`** | `with(['items','payments'])` + agregat refund satu query | Detail order cepat |
+| **POST refund** | Preload stok sama seperti order + batch insert refund items | Refund banyak item tetap ringan |
+| **Adjust payment setelah refund** | Pakai relasi `payments` yang sudah di-load, tanpa `fresh()` berulang | Kurangi query sia-sia |
+| **GET `/menus`, `/bundle-menus`** | 1 query parent + 2 query anak (`whereIn` + `groupBy`) | Pola list + relasi efisien |
+| **Bundle store/update** | Load semua `Menu` sekaligus (`whereIn`) | Tidak query per baris bundle |
+| **Schema `hasColumn`** | Trait `CachesSchemaColumns` | Cek kolom DB tidak diulang tiap request |
+| **GET `/orders`** | Parameter `limit` (default 500, max 2000) | Hindari load seluruh tabel order |
+| **GET `/stock-moves`** | Parameter `limit` (default 500, max 5000) | Riwayat stok terbatas |
+| **Shift `active-summary`** | Cache 10 detik + query agregat SQL | Dashboard kasir tidak hammer DB |
+| **Index database** | Migration `2026_05_19_000000_add_performance_indexes` | Filter `created_by`, tanggal, SKU lebih cepat |
+
+### Parameter query opsional
+
+```http
+GET /api/orders?since=2026-05-01T00:00:00&limit=200
+GET /api/stock-moves?sku=KOPI-001&limit=100
+GET /api/products?updatedSince=2026-05-18T10:00:00
+```
+
+### Development: deteksi lazy loading
+
+Di environment `local`, `Model::preventLazyLoading()` aktif di `AppServiceProvider` — relasi yang belum di-`with()` akan error di dev, membantu mencegah N+1 baru.
+
+---
+
+## Struktur folder penting
+
+```
+app/
+  Http/
+    Controllers/Api/     # Semua handler REST
+    Concerns/
+      CachesSchemaColumns.php
+    Middleware/
+      CookieAuth.php
+  Models/                # Order, Product, Menu, Shift, …
+database/
+  migrations/            # Skema + index performa
+routes/
+  api.php                # Definisi route API
+```
+
+---
+
+## Endpoint utama (ringkas)
+
+Semua path di bawah ini relatif ke `/api`.
+
+| Method | Path | Keterangan |
+|--------|------|------------|
+| GET | `/health` | Status API |
+| GET | `/products` | Daftar produk (sync: `?updatedSince=`) |
+| GET | `/menus` | Menu + components + variants |
+| POST | `/orders` | Buat transaksi + kurangi stok |
+| GET | `/orders/{id}` | Detail order + refund info per item |
+| POST | `/orders/{id}/refund` | Refund + restock (+ opsional adjust payment) |
+| GET | `/shifts/active-summary` | Ringkasan shift aktif (cached) |
+| GET | `/open-bills` | Bill terbuka |
+
+Lihat `routes/api.php` untuk daftar lengkap.
+
+---
+
+## Catatan pengembangan
+
+- **Uang:** selalu gunakan field `*_cents` (integer).
+- **Stok order:** langsung SKU → kurangi 1 produk; `menu_code` → kurangi semua komponen di `menu_items`.
+- **Refund:** qty divalidasi agar tidak melebihi yang sudah dibeli minus yang sudah direfund.
+- Setelah menambah migration baru, jalankan `php artisan migrate`.
+
+---
+
+## Lisensi
+
+Project ini memakai framework Laravel (MIT). Sesuaikan lisensi aplikasi bisnis Anda jika diperlukan.
