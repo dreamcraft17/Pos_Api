@@ -3,8 +3,8 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use App\Http\Middleware\CookieUser;
 use App\Http\Middleware\CookieAuth;
+use App\Http\Middleware\RequireAuth;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->appendToGroup('api', CookieAuth::class);
+        $middleware->alias(['auth.cookie' => RequireAuth::class]);
         $middleware->throttleApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {

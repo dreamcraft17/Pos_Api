@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Models\PaymentMethod;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
-class PaymentMethodController extends Controller
+class PaymentMethodController extends BaseApiController
 {
     public function index()
     {
@@ -33,7 +33,7 @@ class PaymentMethodController extends Controller
             'name'       => $validated['name'],
             'enabled'    => true,
             'sort'       => $validated['sort'] ?? 0,
-            'created_by' => optional($request->user())->id, 
+            'created_by' => $this->currentUser($request)?->id, 
         ]);
 
         return response()->json($method, 201);

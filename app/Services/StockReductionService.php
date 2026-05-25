@@ -195,7 +195,7 @@ class StockReductionService
         }
         $p = $products[$sku] ?? null;
         if (! $p) {
-            return;
+            throw new \InvalidArgumentException("Product SKU not found: {$sku}");
         }
         $p->decrement('stock', $qty);
         $stockMoves[] = [

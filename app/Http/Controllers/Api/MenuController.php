@@ -96,18 +96,34 @@ class MenuController extends BaseApiController
 
         $u = $this->currentUser($r);
 
-        return DB::transaction(function() use ($data, $u) {
-            // Penting: SELALU membuat baris baru (bukan updateOrCreate by code)
-            $menu = Menu::create([
-                'code'        => $data['code'],
-                'name'        => $data['name'],
-                'price_rupiah' => $data['price_rupiah'],
-                'image_url'   => $data['image_url'] ?? null,
-                'enabled'     => $data['enabled'] ?? true,
-                'sort'        => $data['sort'] ?? 0,
-                'created_by'  => $u?->id,
-                'type'        => $data['type'] ?? null,
-            ]);
+        return DB::transaction(function () use ($data, $u) {
+            $menu = Menu::updateOrCreate(
+                ['code' => $data['code'], 'created_by' => $u?->id],
+                [
+                    'name'         => $data['name'],
+                    'price_rupiah' => $data['price_rupiah'],
+                    'image_url'    => $data['image_url'] ?? null,
+                    'enabled'      => $data['enabled'] ?? true,
+                    'sort'         => $data['sort'] ?? 0,
+                    'type'         => $data['type'] ?? null,
+                ]
+            );
+
+            if ($this->tableHasColumn('menu_items', 'created_by')) {
+                \App\Models\MenuItem::where('menu_code', $menu->code)
+                    ->where('created_by', $u?->id)
+                    ->delete();
+            } else {
+                \App\Models\MenuItem::where('menu_code', $menu->code)->delete();
+            }
+
+            if ($this->tableHasColumn('menu_variants', 'created_by')) {
+                \App\Models\MenuVariant::where('menu_code', $menu->code)
+                    ->where('created_by', $u?->id)
+                    ->delete();
+            } else {
+                \App\Models\MenuVariant::where('menu_code', $menu->code)->delete();
+            }
 
             $this->insertMenuItems($menu->code, $data['components'] ?? [], $u?->id);
             $this->insertMenuVariants($menu->code, $data['variants'] ?? [], $u?->id);

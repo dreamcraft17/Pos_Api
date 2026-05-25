@@ -11,7 +11,7 @@ class OpenBillController extends BaseApiController
     // GET /api/open-bills
     public function index(Request $request)
     {
-        $user = null;
+        $user = $this->currentUser($request);
 
         $limit = max(1, min(
             (int) $request->query('limit', config('pos.limits.open_bills_default', 100)),
@@ -221,7 +221,7 @@ public function store(Request $request)
 {
     $this->mergeNormalizedInput($request);
 
-    $user = null;
+    $user = $this->currentUser($request);
 
     $data = $request->validate([
         'client_id' => 'nullable|string|max:100',
@@ -444,20 +444,17 @@ public function store(Request $request)
     // dipanggil kalau bill sudah di-issue jadi Order / dibatalkan
 public function destroy(Request $request, int $id)
 {
-    $user = null; // TODO: nanti bisa diisi dari auth kalau sudah jalan
+    $user = $this->currentUser($request);
 
-    // HAPUS filter user_id dulu, supaya id-nya tetap bisa dihapus
     $bill = OpenBill::find($id);
 
-    // Kalau sudah tidak ada, anggap saja sudah beres (idempotent)
-    if (!$bill) {
+    if (! $bill) {
         return response()->json(['ok' => true]);
     }
 
-    // (opsional) kalau nanti kamu mau pakai user, baru dicek di sini:
-    // if ($user && $bill->user_id !== $user->id) {
-    //     abort(403, 'Forbidden');
-    // }
+    if ($user && $bill->user_id && (int) $bill->user_id !== (int) $user->id) {
+        return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+    }
 
     $bill->delete();
 

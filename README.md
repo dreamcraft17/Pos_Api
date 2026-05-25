@@ -102,7 +102,7 @@ php artisan migrate --force
 ## Autentikasi
 
 - Registrasi / login: `POST /api/auth/register`, `POST /api/auth/login`
-- Beberapa route shift memakai middleware `auth:sanctum`
+- Beberapa route shift memakai middleware `auth.cookie` (sesi cookie `uid`)
 - Middleware `CookieAuth` di grup `api` mendukung client yang mengirim cookie/session
 - Helper `currentUser()` di `BaseApiController` mengambil user dari attribute request, Sanctum, atau `auth()`
 

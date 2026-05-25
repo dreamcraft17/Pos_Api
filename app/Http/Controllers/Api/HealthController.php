@@ -17,7 +17,9 @@ class HealthController
             DB::select('SELECT 1');
             return ['ok' => true, 'db' => 'up'];
         } catch (\Throwable $e) {
-            return response()->json(['ok'=>false,'error'=>$e->getMessage()], 500);
+            report($e);
+
+            return response()->json(['ok' => false, 'db' => 'down'], 500);
         }
     }
 }

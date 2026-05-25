@@ -14,6 +14,7 @@ use App\Models\PaymentMethod;
 use App\Http\Controllers\Api\PaymentMethodController;
 use App\Http\Controllers\Api\StockRequestController;
 use App\Http\Controllers\Api\ShiftController;
+use App\Http\Controllers\Api\BundleMenuController;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\File;
 
@@ -114,13 +115,14 @@ Route::get('/stock-requests/proof-file/{filename}', function ($filename) {
 
 
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth.cookie')->group(function () {
     Route::get('/shifts', [ShiftController::class, 'index']);
     Route::post('/shifts', [ShiftController::class, 'store']);
     Route::get('/shifts/{id}', [ShiftController::class, 'show']);
     Route::delete('/shifts/{id}', [ShiftController::class, 'destroy']);
-    
 });
+
+Route::patch('/stock-requests/{id}/items/{itemId}/tracking', [StockRequestController::class, 'setItemTracking']);
 
 Route::prefix('bundle-menus')->group(function () {
     Route::get('/', [BundleMenuController::class, 'index']);

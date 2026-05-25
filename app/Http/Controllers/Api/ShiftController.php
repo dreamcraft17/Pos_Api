@@ -179,12 +179,13 @@ class ShiftController extends BaseApiController
                 COALESCE(SUM(o.tax_rupiah), 0) as tax_rupiah,
                 COALESCE(SUM(o.total_rupiah), 0) as net_rupiah,
                 
-                -- Sold items today
+                -- Sold item qty today
                 (
-                    SELECT COUNT(*) 
-                    FROM orders 
-                    WHERE DATE(created_at) = CURDATE()
-                    " . ($userId ? "AND created_by = ?" : "") . "
+                    SELECT COALESCE(SUM(oi.qty), 0)
+                    FROM order_items oi
+                    INNER JOIN orders o2 ON o2.id = oi.order_id
+                    WHERE DATE(o2.created_at) = CURDATE()
+                    " . ($userId ? "AND o2.created_by = ?" : "") . "
                 ) as sold_items_today,
                 
                 -- Refund total (shift period)
@@ -537,6 +538,5 @@ class ShiftController extends BaseApiController
     {
         $key = "active_shift_summary_" . ($userId ?? 'public');
         Cache::forget($key);
-        Cache::tags(['shifts'])->flush();
     }
 }

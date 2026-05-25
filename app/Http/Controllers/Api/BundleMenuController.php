@@ -31,7 +31,7 @@ class BundleMenuController extends BaseApiController
     {
         $q = BundleMenu::query();
         if ($u) {
-            $q->where('created_by', $u->id);
+            $q->where('created_by_id', $u->id);
         }
 
         $bundles = $q->orderBy('sort')->orderBy('id')->get();
@@ -149,10 +149,11 @@ class BundleMenuController extends BaseApiController
 
         return DB::transaction(function() use ($code, $data, $u) {
             $bundle = BundleMenu::where('bundle_code', $code)
-                        ->when($u, fn($q) => $q->where('created_by', $u->id))
+                        ->when($u, fn($q) => $q->where('created_by_id', $u->id))
                         ->firstOrFail();
 
-            $bundle->update($data);
+            $bundle->fill(collect($data)->except(['bundle_items', 'components'])->all());
+            $bundle->save();
 
             // Update bundle items jika dikirim
             if (array_key_exists('bundle_items', $data)) {
@@ -189,7 +190,7 @@ class BundleMenuController extends BaseApiController
 
         return DB::transaction(function() use ($code, $u) {
             $bundle = BundleMenu::where('bundle_code', $code)
-                        ->when($u, fn($q) => $q->where('created_by', $u->id))
+                        ->when($u, fn($q) => $q->where('created_by_id', $u->id))
                         ->firstOrFail();
 
             // Hapus anak-anak

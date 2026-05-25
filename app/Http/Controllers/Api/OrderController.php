@@ -139,9 +139,11 @@ class OrderController extends BaseApiController
 
         $q = Order::query();
 
-        if ($u) {
-            $q->where('created_by', $u->id);
+        if (! $u) {
+            return collect();
         }
+
+        $q->where('created_by', $u->id);
 
         if (! empty($since)) {
             $q->where('created_at', '>=', $since);
@@ -185,7 +187,11 @@ class OrderController extends BaseApiController
         $u = $this->currentUser($r);
         $o = Order::with(['items', 'payments'])->findOrFail($id);
 
-        if ($u && $o->created_by && $o->created_by !== $u->id) {
+        if (! $u) {
+            return response()->json(['ok' => false, 'message' => 'unauthenticated'], 401);
+        }
+
+        if ($o->created_by && (int) $o->created_by !== (int) $u->id) {
             return response()->json(['ok' => false, 'message' => 'forbidden'], 403);
         }
 
@@ -220,7 +226,16 @@ class OrderController extends BaseApiController
     // ===== daftar refund + itemnya (tetap) =====
     public function refunds(Request $r, $id)
     {
-        Order::findOrFail($id);
+        $u = $this->currentUser($r);
+        $order = Order::findOrFail($id);
+
+        if (! $u) {
+            return response()->json(['ok' => false, 'message' => 'unauthenticated'], 401);
+        }
+
+        if ($order->created_by && (int) $order->created_by !== (int) $u->id) {
+            return response()->json(['ok' => false, 'message' => 'forbidden'], 403);
+        }
 
         return [
             'ok' => true,
@@ -427,14 +442,33 @@ class OrderController extends BaseApiController
         ->pluck('qty','order_item_id');
 
     // Validasi qty ≤ (dibeli - sudah_refund)
-    foreach ($data['items'] as $it) {
+    foreach ($data['items'] as $idx => $it) {
         $oiId = $it['order_item_id'] ?? null;
+
+        if (! $oiId) {
+            foreach ($orderItems as $candidate) {
+                if (! empty($it['sku']) && $candidate->sku === $it['sku']) {
+                    $oiId = $candidate->id;
+                    break;
+                }
+                if (! empty($it['menu_code']) && $candidate->menu_code === $it['menu_code']) {
+                    $oiId = $candidate->id;
+                    break;
+                }
+                if (! empty($it['bundle_code']) && ($candidate->bundle_code ?? null) === $it['bundle_code']) {
+                    $oiId = $candidate->id;
+                    break;
+                }
+            }
+            $data['items'][$idx]['order_item_id'] = $oiId;
+        }
+
         if ($oiId && isset($orderItems[$oiId])) {
-            $bought  = (int)$orderItems[$oiId]->qty;
-            $already = (int)($refundedSoFar[$oiId] ?? 0);
-            $req     = (int)$it['qty'];
+            $bought  = (int) $orderItems[$oiId]->qty;
+            $already = (int) ($refundedSoFar[$oiId] ?? 0);
+            $req     = (int) $it['qty'];
             if ($req > max(0, $bought - $already)) {
-                return response()->json(['ok'=>false,'message'=>"refund qty exceeds purchased for item $oiId"], 422);
+                return response()->json(['ok' => false, 'message' => "refund qty exceeds purchased for item $oiId"], 422);
             }
         }
     }
@@ -473,9 +507,10 @@ class OrderController extends BaseApiController
     unset($it);
 
     // ===== Distribusi diskon & pajak proporsional =====
-    $orderSubtotal = (int)($order->subtotal_rupiah ?? 0);
-    $orderDiscount = (int)($order->discount_rupiah ?? 0);
-    $orderTax      = (int)($order->tax_rupiah ?? 0);
+    $orderSubtotal = (int) ($order->subtotal_rupiah ?? 0);
+    $orderDiscount = (int) ($order->discount_rupiah ?? 0);
+    $orderService  = (int) ($order->service_rupiah ?? 0);
+    $orderTax      = (int) ($order->tax_rupiah ?? 0);
 
     $ratio = 0;
     if ($orderSubtotal > 0 && $subtotalRefund > 0) {
@@ -483,16 +518,17 @@ class OrderController extends BaseApiController
     }
 
     $discountRefund = (int) round($orderDiscount * $ratio);
+    $serviceRefund  = (int) round($orderService * $ratio);
     $taxRefund      = (int) round($orderTax * $ratio);
 
-    // total refund = subtotal - bagian diskon + bagian pajak
-    $totalRefund = $subtotalRefund - $discountRefund + $taxRefund;
+    $totalRefund = $subtotalRefund - $discountRefund + $serviceRefund + $taxRefund;
 
     $calc = [
         'subtotal_refund_rupiah' => $subtotalRefund,
         'discount_refund_rupiah' => $discountRefund,
+        'service_refund_rupiah'  => $serviceRefund,
         'tax_refund_rupiah'      => $taxRefund,
-        'ratio'                 => $ratio,
+        'ratio'                  => $ratio,
         'total_refund_rupiah'    => $totalRefund,
     ];
 

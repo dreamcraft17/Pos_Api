@@ -343,9 +343,7 @@ public function uploadProof(Request $request)
     // Pindahkan file
     $file->move($uploadDir, $filename);
 
-    // Bangun URL absolut TANPA mengandalkan APP_URL (biar gak jadi localhost)
-    $origin = $request->getSchemeAndHttpHost();           // contoh: https://pos.domainmu.com
-    $url    = $origin . '/pos-api/public/api/stock-requests/proof-file/' . rawurlencode($filename);
+    $url = url('/api/stock-requests/proof-file/' . rawurlencode($filename));
 
     // Update DB POS
     $item->update([
